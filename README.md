@@ -99,8 +99,10 @@ gh auth login
 | `/init-dev-cycle` | Sonnet | One-time setup: generates project config and agent prompts |
 | `/design <slug>` | Opus | Expands idea → design doc + scenarios → creates GitHub Issues → confirms build |
 | `/queue <slug>` | — | Manual: re-queue after edits, batch designs, or queue without building |
-| `/build` | Opus | Builds in worktrees, opens PRs, then runs `/review` on each |
-| `/build <slug>` | Opus | Builds next work order for a slug, then chains `/review` |
+| `/build` | Opus | Parallel: one background agent per eligible issue; then `/review` each |
+| `/build <slug>` | Opus | Next work order for slug (one background agent), then `/review` |
+| `/build <slug> i-j` | Opus | Series for work orders *i*…*j* (e.g. `4-7`): background build → **`/review` to completion** → next build |
+| `/build <slug> --all` | Opus | Same series for **all** queued `slug-*` issues |
 | `/review <slug>-N` | Sonnet | Review + fixes on branch (auto after `/build`, or manual) |
 | `/fix <PR#>` | Sonnet | Iterative fixes on an existing PR branch |
 | `/fix <description>` | Sonnet | Standalone bug fix with its own branch and work order |

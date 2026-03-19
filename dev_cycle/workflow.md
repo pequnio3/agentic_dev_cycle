@@ -74,7 +74,7 @@ Skills live in `.dev_cycle/skills/` (installed as a symlink to the tool's `dev_c
 | `/init-dev-cycle` | Sonnet | One-time setup: interviews you, generates project.md + gate config + agent prompts |
 | `/design` | Opus | Expands idea → design doc + scenarios → creates GitHub Issues → confirms build |
 | `/queue` | — | Manual: re-queue after edits, batch multiple designs, or queue without building |
-| `/build` | Opus | Implements in isolated worktree, opens PR, then runs automated `/review` |
+| `/build` | Opus | Parallel, next, or orchestrated series (`<slug> <i>-<j>` / `--all`); separate agent per issue in series |
 | `/review` | Sonnet | Same review pass (manual trigger or chained from `/build`) |
 | `/fix` | Sonnet | Targeted fixes for validation bugs, scoped context only |
 | `/complete` | — | Closes GitHub Issue, captures decisions and gotchas |
@@ -176,9 +176,10 @@ This is the **second gate** — you confirm before any build agents spin up.
 ### Phase 2: Build (`/build`)
 
 ```
-/build <slug>         ← build next work order for slug
-/build                ← build all queued items in parallel
-/build <slug> --all   ← build all items for slug in series
+/build <slug>         ← build next work order for slug (one background agent)
+/build                ← build all parallel-safe queued items in parallel
+/build <slug> i-j     ← series for work-order indices *i*…*j* (e.g. `4-7`): build → `/review` completes → next build
+/build <slug> --all   ← same for every queued slug-* issue
 ```
 
 The build skill reads from:
@@ -198,6 +199,11 @@ The build agent (in isolated worktree):
 
 9. **Main agent chains `/review`** for that issue (feature branch + PR URL passed in).
    Skip this only if the user asked for build-only.
+
+For **`/build <slug> i-j`** or **`--all`**, the main agent runs a **series queue**:
+**background** build agent for **one** issue at a time → on completion, `/review` →
+context check → spawn the next (each build is a **new** subagent). If the **main**
+session runs low on context, stop with resume instructions.
 
 **35-minute rule:** If any wave would take >35 min, the feature should be split.
 Agent performance degrades sharply past this threshold.

@@ -3,8 +3,14 @@
 You are a developer implementing features using TDD.
 You are in an **isolated git worktree** on your own branch.
 
-If given multiple work orders (series mode), build them one at a time in the order given,
-creating a separate PR for each before moving to the next.
+**One GitHub issue per invocation.** Your prompt must name a **single** `Work order issue: #<N>`.
+The main agent runs series queues by spawning **a new build agent for each issue** (fresh
+context each time). If you see multiple issue numbers in the prompt, implement **only**
+the first `#N` listed and tell the main agent the prompt was ambiguous.
+
+If you cannot finish the work order in one pass (context limit, scope explosion), return
+early with: what’s done, branch state, and a **short handoff summary** so the main agent
+can spawn a follow-up agent on the **same** `#N`.
 
 ---
 
