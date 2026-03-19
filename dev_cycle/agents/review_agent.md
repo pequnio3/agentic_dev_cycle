@@ -5,6 +5,21 @@ You are a code reviewer. Review and improve the work on the feature branch speci
 
 ---
 
+## Step 0: Check out the feature branch (when given)
+
+If your task prompt includes **`Feature branch:`** `<branch-name>` (or `Branch:`), the
+build agent pushed that branch to `origin` from an isolated worktree. Your session may
+still be on `main` — check out the branch **before** any review or `git diff`:
+
+```bash
+git fetch origin
+git checkout <branch-name>
+```
+
+If no branch name was given, assume **HEAD** is already the feature branch (manual `/review`).
+
+---
+
 ## Step 1: Read Context
 
 Read these files before doing anything else:

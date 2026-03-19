@@ -12,10 +12,13 @@
 #   bash ~/tools/agentic-dev-cycle/install.sh
 #
 # What it does:
-#   1a. Symlinks .claude/skills/ → skills/  (Claude Code slash commands)
+#   1a. Symlinks .dev_cycle/skills → dev_cycle/skills in this repo (canonical copy)
+#        and wires per-tool hubs: .claude/skills/dev_cycle, .cursor/skills/dev_cycle,
+#        .agents/skills/dev_cycle, .gemini/skills/dev_cycle — each also gets flat
+#        per-skill symlinks so Claude/Cursor discover /design, /build, etc.
 #   1b. Appends workflow routing to AGENTS.md  (Codex CLI + Gemini CLI)
 #   2.  Bootstraps .dev_cycle/ in your project with all config templates
-#   3.  Adds .dev_cycle/ and .claude/skills to .gitignore
+#   3.  Adds .dev_cycle/ and skill hub paths to .gitignore
 #   4.  Does NOT overwrite existing config files (safe to re-run after updates)
 #
 # After install, run /init-dev-cycle (Claude Code), or ask your AI agent
@@ -53,29 +56,79 @@ ok()   { echo -e "${GREEN}✓${NC} $1"; }
 info() { echo -e "${BLUE}→${NC} $1"; }
 skip() { echo -e "${YELLOW}↷${NC} $1 (already exists — skipped)"; }
 
+# Canonical skills live under .dev_cycle/skills (points at this repo's dev_cycle/skills).
+# Each tool hub gets dev_cycle → .dev_cycle/skills plus one symlink per skill at the
+# hub root (Claude/Cursor scan immediate children; dev_cycle/ has no SKILL.md at root).
+link_skill_hub() {
+  local hub_rel="$1"
+  local hub_abs="$PROJECT_ROOT/$hub_rel"
+  local skill_root="$SCRIPT_DIR/dev_cycle/skills"
+
+  mkdir -p "$hub_abs"
+
+  local bundle="$hub_abs/dev_cycle"
+  if [[ -L "$bundle" ]]; then
+    skip "$hub_rel/dev_cycle"
+  elif [[ -e "$bundle" ]]; then
+    echo "Warning: $hub_rel/dev_cycle exists and is not a symlink — not overwriting."
+  else
+    ln -s "../../.dev_cycle/skills" "$bundle"
+    ok "$hub_rel/dev_cycle → .dev_cycle/skills"
+  fi
+
+  local potential name link
+  for potential in "$skill_root"/*/; do
+    [[ -d "$potential" ]] || continue
+    [[ -f "$potential/SKILL.md" ]] || continue
+    name="$(basename "$potential")"
+    link="$hub_abs/$name"
+    if [[ -L "$link" ]]; then
+      skip "$hub_rel/$name"
+    elif [[ -e "$link" ]]; then
+      echo "Warning: $hub_rel/$name exists and is not a symlink — not overwriting."
+    else
+      ln -s "../../.dev_cycle/skills/$name" "$link"
+      ok "$hub_rel/$name → .dev_cycle/skills/$name"
+    fi
+  done
+}
+
 echo ""
 echo "Agentic Dev Cycle — installing into $(basename "$PROJECT_ROOT")"
 echo ""
 
 # ---------------------------------------------------------------------------
-# Step 1a: Symlink .claude/skills/  (Claude Code)
+# Step 1a: .dev_cycle/skills + per-tool skill hubs
 # ---------------------------------------------------------------------------
 
-SKILLS_TARGET="$PROJECT_ROOT/.claude/skills"
-SKILLS_SOURCE="$SCRIPT_DIR/skills"
+mkdir -p "$PROJECT_ROOT/.dev_cycle"
 
-mkdir -p "$PROJECT_ROOT/.claude"
+DEV_CYCLE_SKILLS="$PROJECT_ROOT/.dev_cycle/skills"
+BUNDLED_SKILLS="$SCRIPT_DIR/dev_cycle/skills"
 
-if [[ -L "$SKILLS_TARGET" ]]; then
-  skip ".claude/skills symlink"
-elif [[ -d "$SKILLS_TARGET" ]]; then
-  echo "Warning: .claude/skills/ exists as a real directory, not a symlink."
-  echo "If you want to use this workflow's skills, back it up and re-run:"
-  echo "  mv .claude/skills .claude/skills.bak && bash .agentic-dev-cycle/install.sh"
+if [[ -L "$DEV_CYCLE_SKILLS" ]]; then
+  skip ".dev_cycle/skills symlink"
+elif [[ -d "$DEV_CYCLE_SKILLS" ]] && [[ ! -L "$DEV_CYCLE_SKILLS" ]]; then
+  echo "Warning: .dev_cycle/skills/ exists as a real directory, not a symlink."
+  echo "Back it up and re-run install, or remove it if you want the bundled skills."
 else
-  ln -s "$SKILLS_SOURCE" "$SKILLS_TARGET"
-  ok ".claude/skills → $SKILLS_SOURCE"
+  ln -s "$BUNDLED_SKILLS" "$DEV_CYCLE_SKILLS"
+  ok ".dev_cycle/skills → $BUNDLED_SKILLS"
 fi
+
+# Legacy: entire .claude/skills was a single symlink to the tool skills dir
+CLAUDE_SKILLS_DIR="$PROJECT_ROOT/.claude/skills"
+mkdir -p "$PROJECT_ROOT/.claude"
+if [[ -L "$CLAUDE_SKILLS_DIR" ]]; then
+  rm "$CLAUDE_SKILLS_DIR"
+  ok "Removed legacy .claude/skills symlink (replaced with skill hub layout)"
+fi
+
+info "Linking skill hubs (Claude, Cursor, Codex/Gemini .agents, Gemini .gemini)..."
+link_skill_hub ".claude/skills"
+link_skill_hub ".cursor/skills"
+link_skill_hub ".agents/skills"
+link_skill_hub ".gemini/skills"
 
 # ---------------------------------------------------------------------------
 # Step 1b: AGENTS.md  (Codex CLI + Gemini CLI)
@@ -106,7 +159,7 @@ any of the following tasks, read the corresponding instructions file first.
 | Review a feature branch | \`.dev_cycle/agents/review_agent.md\` |
 | Fix a bug or PR | \`.dev_cycle/agents/fix_agent.md\` |
 | Deploy / start dev servers | \`.dev_cycle/agents/deploy_agent.md\` |
-| Complete a merged work order | \`skills/complete/SKILL.md\` |
+| Complete a merged work order | \`.dev_cycle/skills/complete/SKILL.md\` |
 
 **Project config** (tech stack, architecture patterns, gate commands):
 \`.dev_cycle/project.md\`
@@ -153,7 +206,7 @@ before doing anything else.
 | Review a feature branch | `.dev_cycle/agents/review_agent.md` |
 | Fix a bug or PR | `.dev_cycle/agents/fix_agent.md` |
 | Deploy / start dev servers | `.dev_cycle/agents/deploy_agent.md` |
-| Complete a merged work order | `skills/complete/SKILL.md` |
+| Complete a merged work order | `.dev_cycle/skills/complete/SKILL.md` |
 
 **Project config** (tech stack, architecture patterns, gate commands):
 `.dev_cycle/project.md`
@@ -272,6 +325,9 @@ fi
 
 add_gitignore_entry ".dev_cycle/"
 add_gitignore_entry ".claude/skills"
+add_gitignore_entry ".cursor/skills"
+add_gitignore_entry ".agents/skills"
+add_gitignore_entry ".gemini/skills"
 
 # AGENTS.md and .cursor/rules/dev-cycle.mdc are intentionally NOT gitignored
 # — commit them so all team members get workflow routing regardless of their AI tool.

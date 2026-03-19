@@ -10,14 +10,27 @@ what ports they run on, and what health check endpoints to use.
 
 ## Step 1: Checkout the Branch
 
-**If a PR number is provided:**
+Your task prompt sets **`Deploy mode:`** `pr` | `branch` | `current`.
+
+**`Deploy mode: pr`** — `PR number:` is set:
 ```bash
 gh pr view <PR#> --json headRefName --jq '.headRefName'
 git checkout <branch_name>
 git pull origin <branch_name>
 ```
 
-**If no PR number is provided:** Stay on current branch.
+**`Deploy mode: branch`** — `Feature branch:` is set (e.g. `dev-model-picker-1`):
+```bash
+git fetch origin
+git checkout <Feature branch value>
+git pull origin <Feature branch value>
+```
+If checkout fails (branch missing), list open PRs to help the user:
+```bash
+gh pr list --state open --limit 30
+```
+
+**`Deploy mode: current`** — stay on whatever branch is checked out:
 ```bash
 git branch --show-current
 ```

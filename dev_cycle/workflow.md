@@ -12,7 +12,8 @@ bash .agentic-dev-cycle/install.sh
 ```
 
 The install script:
-- Symlinks `.claude/skills/` → `.agentic-dev-cycle/skills/` (makes slash commands available)
+- Symlinks `.dev_cycle/skills` → `.agentic-dev-cycle/dev_cycle/skills/` (canonical bundle)
+- Adds `.claude/skills/dev_cycle` → `.dev_cycle/skills` and per-skill symlinks for Claude slash commands; mirrors under `.cursor/skills/`, `.agents/skills/`, and `.gemini/skills/`
 - Copies config templates to `.dev_cycle/` in your project
 - Creates the design and prompts directories
 - Checks for `gh` CLI authentication (required for GitHub Issues integration)
@@ -49,8 +50,8 @@ Six-skill pipeline with two human gates:
 /design   →  raw idea → structured design doc + BDD scenarios
               ↓ (you approve → GitHub Issues created automatically)
               ↓ (you confirm "yes" → build starts)
-/build    →  GitHub Issues → implemented branches (TDD + scenarios, worktrees)
-/review   →  branch → verified, scenarios pass, tested → PR
+/build    →  GitHub Issues → branch + PR (worktree), then **chains /review** on that branch
+/review   →  (also standalone) verify spec, scenarios, gates; fix and push on the same PR branch
               ↓ (you validate and merge)
 /fix      →  targeted fixes for issues found during validation
 /complete →  close issue, capture learnings as GitHub Issues (dev-cycle:decision)
@@ -66,36 +67,35 @@ but is no longer a required step in the normal flow.
 
 ## Skills
 
-Skills live in `skills/` and are invoked as slash commands:
+Skills live in `.dev_cycle/skills/` (installed as a symlink to the tool's `dev_cycle/skills/`) and are invoked as slash commands:
 
 | Skill | Model | What it does |
 |-------|-------|-------------|
 | `/init-dev-cycle` | Sonnet | One-time setup: interviews you, generates project.md + gate config + agent prompts |
 | `/design` | Opus | Expands idea → design doc + scenarios → creates GitHub Issues → confirms build |
 | `/queue` | — | Manual: re-queue after edits, batch multiple designs, or queue without building |
-| `/build` | Opus | Implements feature with TDD (red/green/commit) in isolated worktree |
-| `/review` | Sonnet | Reviews against spec, hardened checks (N+1, auth boundaries, error UX) |
+| `/build` | Opus | Implements in isolated worktree, opens PR, then runs automated `/review` |
+| `/review` | Sonnet | Same review pass (manual trigger or chained from `/build`) |
 | `/fix` | Sonnet | Targeted fixes for validation bugs, scoped context only |
 | `/complete` | — | Closes GitHub Issue, captures decisions and gotchas |
-| `/deploy` | Sonnet | Starts dev servers, monitors logs, auto-fixes startup errors |
+| `/deploy` | Sonnet | Dev servers: no arg = current branch; `#N`/`N` = PR; else `dev-<arg>` |
 
 ## Directory Layout
 
 **Tool repo** (the submodule at `.agentic-dev-cycle/`):
 
 ```
-skills/                       ← skill definitions (how to do the work)
-  init-dev-cycle/SKILL.md     ← project setup
-  design/SKILL.md
-  queue/SKILL.md
-  build/SKILL.md
-  review/SKILL.md
-  fix/SKILL.md
-  complete/SKILL.md
-  deploy/SKILL.md
-
-dev_cycle/                    ← templates and generic docs (source)
-  workflow.md                 ← this file
+dev_cycle/
+  skills/                     ← skill definitions (how to do the work)
+    init-dev-cycle/SKILL.md   ← project setup
+    design/SKILL.md
+    queue/SKILL.md
+    build/SKILL.md
+    review/SKILL.md
+    fix/SKILL.md
+    complete/SKILL.md
+    deploy/SKILL.md
+  workflow.md                 ← this file (templates + generic docs)
   project.md                  ← starter project config template
   issue_template.md           ← template for GitHub Issue bodies
   gates.sh                    ← executable verification gates (project-agnostic)
@@ -107,6 +107,7 @@ dev_cycle/                    ← templates and generic docs (source)
 
 ```
 .dev_cycle/                   ← state + config (the work itself, hidden by default)
+  skills/                     ← symlink → .agentic-dev-cycle/dev_cycle/skills (from install.sh)
   workflow.md                 ← workflow documentation
   project.md                  ← project config: tech stack, patterns, commands
   gates.sh                    ← executable verification gates (project-agnostic)
@@ -195,6 +196,9 @@ The build agent (in isolated worktree):
 7. **All scenarios must pass** before creating PR (if present)
 8. Pushes branch and creates PR with `Closes #<N>`
 
+9. **Main agent chains `/review`** for that issue (feature branch + PR URL passed in).
+   Skip this only if the user asked for build-only.
+
 **35-minute rule:** If any wave would take >35 min, the feature should be split.
 Agent performance degrades sharply past this threshold.
 
@@ -205,19 +209,22 @@ Agent performance degrades sharply past this threshold.
 /review #<issue-number>
 ```
 
-The review skill resolves the issue number and transitions the label:
-```bash
-gh issue edit <N> --remove-label "dev-cycle:build" --add-label "dev-cycle:review"
-```
+Usually runs **automatically after each `/build` completion**. Use these commands for a
+re-review after `/fix`, or if you skipped the chain.
 
-The review agent (Sonnet, same branch):
+The review skill resolves the issue number. Labels: `/build`’s handoff sets
+`dev-cycle:review` (and removes `dev-cycle:build`) before review runs; `/review` keeps
+that idempotent.
+
+The review agent (Sonnet) **checks out the feature branch** when `Feature branch:` is
+passed (required after `/build`):
 1. Reads work order from `gh issue view <N>`
 2. Checks for spec drift (highest priority)
 3. **Verifies all BDD scenarios pass** (hard gate if scenarios present)
 4. Runs hardened checks: N+1 queries, auth boundary violations, missing error UX, resource leaks
 5. Verifies TDD tests exist and are sufficient
-6. Runs `gates.sh pre-pr`
-7. Creates PR with `Closes #<N>`
+6. Fixes issues, commits, pushes — **updates the existing PR** from `/build`
+7. Runs `gates.sh pre-pr`
 
 ### Phase 4: Validate (you)
 

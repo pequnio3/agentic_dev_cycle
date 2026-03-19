@@ -1,7 +1,7 @@
 ---
 name: build
 description: >
-  Build queued work orders in isolated worktrees.
+  Build queued work orders in isolated worktrees, then run /review on each result.
   Use when: "build", "build <slug>", "build <slug> --all".
   /build → parallel build all ready items
   /build <slug> → build next item for that slug
@@ -75,11 +75,27 @@ description: >
 
 ### After Build (main agent — run after each agent notification)
 
-When a build agent completes and reports a PR:
+When a build agent completes and reports branch + PR URL(s):
+
+1. **Hand off to review** — for **each** work order the build agent finished, immediately
+   run the **`review` skill** for that issue number. Pass through the reported values:
+   - `Feature branch: dev-<slug>-N` (exact name from the build agent)
+   - `PR: <URL>`
+   Use the review model from `.dev_cycle/project.md`. Run reviews **one at a time** if
+   multiple builds completed (finish review for issue A before starting B).
+
+   The review agent checks out the branch, runs the full review (fixes, gates, push), and
+   updates the work order on the issue per `review_agent.md`.
+
+2. **GitHub labels and comment** — do this **before** spawning the review agent so the
+   issue leaves the build queue while automated review runs:
 
 ```bash
 gh issue edit <N> --remove-label "dev-cycle:build" --add-label "dev-cycle:review"
 gh issue comment <N> --body "Built on branch dev-<slug>-N. PR: <PR URL>"
 ```
 
-Report the PR URL to the user.
+3. Report the PR URL and review verdict summary to the user when the chain finishes.
+
+If the user explicitly asked for **build only** (no review), skip the review handoff and
+only run the `gh` commands and PR report.

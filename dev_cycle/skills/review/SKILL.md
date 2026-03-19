@@ -23,7 +23,9 @@ When this skill is invoked:
 2. Read `.dev_cycle/project.md` to get the model for the review agent
    (look for the `review` row in the Models table; default: `claude-sonnet-4-6`).
 
-3. Spawn a **foreground** review agent on the current branch (no new worktree):
+3. Spawn a **foreground** review agent in the project repo (no new worktree). The agent
+   checks out the feature branch when you pass **`Feature branch:`** (required after `/build`;
+   optional for a manual `/review` when the user is already on that branch):
    ```
    Agent tool:
      subagent_type: general-purpose
@@ -31,16 +33,21 @@ When this skill is invoked:
      prompt: |
        Read .dev_cycle/agents/review_agent.md for your full instructions.
        Work order issue: #<N>
+       Feature branch: dev-<slug>-<N>
+       PR: <PR URL if known>
        Model: <model from project.md>
    ```
 
-4. After the review agent runs and creates a PR, transition the issue label:
+4. After the review agent finishes (it updates the branch with fixes and pushes as needed):
+   ensure the issue has label `dev-cycle:review` and not `dev-cycle:build`:
    ```bash
-   gh issue edit <issue-N> --remove-label "dev-cycle:build" --add-label "dev-cycle:review"
+   gh issue edit <issue-N> --remove-label "dev-cycle:build" --add-label "dev-cycle:review" 2>/dev/null || true
    ```
 
-   The PR body created by the review agent should include `Closes #<issue-N>` for
-   GitHub auto-linking.
+   (Idempotent — `/build` may already have applied this label when chaining.)
+
+   The PR should already exist from the build agent and link to the issue; the review agent
+   adds commits on the same branch.
 
 5. Show the agent's output to the user. If the verdict is `changes-needed`, the user
    can run `/fix` to address issues, then re-run `/review`.

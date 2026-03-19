@@ -18,8 +18,8 @@ breaks development into phases with a specialist agent for each:
               ↓ you review and approve  (gate 1)
               → GitHub Issues created automatically
               ↓ you confirm "yes, build"  (gate 2)
-/build     GitHub Issues → implemented branches (TDD, worktrees, scenarios pass)
-/review    branch → verified, tested, scenarios-green PR
+/build     GitHub Issues → branch + PR, then automated /review on that branch
+/review    same review pass (standalone re-run or after /fix)
               ↓ you validate and merge
 /fix       targeted fixes for issues found during validation
 /complete  close GitHub Issue, capture decisions and gotchas
@@ -49,12 +49,14 @@ bash ~/tools/agentic-dev-cycle/install.sh
 ```
 
 The install script:
-- Symlinks `.claude/skills/` → the tool's `skills/` dir (absolute path) — Claude Code slash commands
+- Symlinks `.dev_cycle/skills` → the tool's `dev_cycle/skills/` (canonical skill bundle)
+- Adds `.claude/skills/dev_cycle` → `.dev_cycle/skills`, plus flat per-skill symlinks under `.claude/skills/` so `/design`, `/build`, etc. work in Claude Code
+- Mirrors the same layout under `.cursor/skills/` (Cursor Agent Skills), `.agents/skills/` (Codex + Gemini CLI repo skills), and `.gemini/skills/` (Gemini CLI workspace path)
 - Appends a workflow routing section to `AGENTS.md` — Codex CLI and Gemini CLI support
 - Creates `.cursor/rules/dev-cycle.mdc` — auto-loaded into every Cursor Composer session
 - Copies config templates to `.dev_cycle/` in your project
 - Checks for `gh` CLI authentication (required for GitHub Issues integration)
-- Adds `.dev_cycle/` and `.claude/skills` to `.gitignore`
+- Adds `.dev_cycle/` and the skill hub directories to `.gitignore`
 
 To update the tool later, just `git pull` in `~/tools/agentic-dev-cycle` — no changes needed in your projects.
 
@@ -97,13 +99,16 @@ gh auth login
 | `/init-dev-cycle` | Sonnet | One-time setup: generates project config and agent prompts |
 | `/design <slug>` | Opus | Expands idea → design doc + scenarios → creates GitHub Issues → confirms build |
 | `/queue <slug>` | — | Manual: re-queue after edits, batch designs, or queue without building |
-| `/build` | Opus | Builds all queued work orders in parallel (isolated worktrees) |
-| `/build <slug>` | Opus | Builds next work order for a slug |
-| `/review <slug>-N` | Sonnet | Reviews branch against spec, verifies scenarios pass |
+| `/build` | Opus | Builds in worktrees, opens PRs, then runs `/review` on each |
+| `/build <slug>` | Opus | Builds next work order for a slug, then chains `/review` |
+| `/review <slug>-N` | Sonnet | Review + fixes on branch (auto after `/build`, or manual) |
 | `/fix <PR#>` | Sonnet | Iterative fixes on an existing PR branch |
 | `/fix <description>` | Sonnet | Standalone bug fix with its own branch and work order |
 | `/complete <slug>-N` | — | Closes GitHub Issue, captures decisions as GitHub Issues labeled `dev-cycle:decision` |
-| `/deploy` | Sonnet | Starts dev servers, monitors logs, auto-fixes errors |
+| `/deploy` | Sonnet | Dev servers on **current** branch |
+| `/deploy #42` or `/deploy 42` | Sonnet | Checkout PR **#42**’s head branch, then run |
+| `/deploy model-picker-1` | Sonnet | Checkout **`dev-model-picker-1`**, then run |
+| `/deploy dev-foo-2` | Sonnet | Checkout branch **`dev-foo-2`** literally |
 
 Models are defaults. Override per-agent in `.dev_cycle/project.md`.
 
@@ -185,7 +190,8 @@ The agent commits and the main session creates the GitHub Issues.
 
 ### Fixing bugs found during validation
 
-After `/review` creates a PR, check out the branch and test it manually. If you find
+After `/build`, the PR already exists and automated `/review` updates that branch.
+Check out the PR branch and test manually. If you find
 issues, describe them to `/fix`:
 
 ```
@@ -241,13 +247,17 @@ from main (Phase 1 is already merged) — no stacking required.
 
 ---
 
-### Deploying a PR for local testing
+### Deploying a PR (or feature branch) for local testing
 
 ```
 /deploy #23
+/deploy 23              ← same as #23 (digits-only = PR number)
+/deploy model-picker-1  ← branch dev-model-picker-1
+/deploy dev-foo-2       ← literal branch name
+/deploy                 ← current checkout
 ```
 
-Checks out the PR branch, starts dev servers (using commands from `project.md`),
+Checks out the target branch, starts dev servers (using commands from `project.md`),
 and monitors logs. Startup errors are auto-fixed. While it's running you can say:
 
 - `"logs"` — show recent server output
@@ -387,19 +397,25 @@ After install and init, your project will have:
 
 ```
 ~/tools/agentic-dev-cycle/   ← the tool (clone once, use across projects)
-  skills/                    ← slash command definitions
-  dev_cycle/                 ← templates and generic docs (source)
+  dev_cycle/
+    skills/                  ← skill definitions (SKILL.md per command)
+    ...                      ← templates and generic docs (source)
 
 AGENTS.md                    ← workflow routing for Codex + Gemini (committed)
 
 .cursor/
   rules/
     dev-cycle.mdc            ← auto-loaded into every Cursor Composer session (committed)
+  skills/                    ← symlinks created by install (gitignored): dev_cycle/, design/, ...
 
 .claude/
-  skills -> ~/tools/agentic-dev-cycle/skills   ← symlink (created by install.sh)
+  skills/                    ← symlinks (gitignored): dev_cycle/ → .dev_cycle/skills, plus per-skill
+
+.agents/skills/              ← same pattern for Codex CLI (gitignored)
+.gemini/skills/              ← same pattern for Gemini CLI (gitignored)
 
 .dev_cycle/                  ← your project's workflow state (gitignored by default)
+  skills -> .../dev_cycle/skills   ← symlink to the tool bundle (created by install.sh)
   project.md                 ← project config (generated by /init-dev-cycle)
   gates.sh                   ← generic gate runner
   gates_config.sh            ← your build/test commands

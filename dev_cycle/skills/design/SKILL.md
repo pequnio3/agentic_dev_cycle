@@ -150,7 +150,7 @@ When this skill is invoked:
    ```
 
    **If the user confirms** (yes, build it, go, start):
-   - Follow the build skill logic from `skills/build/SKILL.md`
+   - Follow the build skill logic from `.dev_cycle/skills/build/SKILL.md`
    - Spawn background build agents for all eligible issues
    - Report PR URLs as agents complete
 

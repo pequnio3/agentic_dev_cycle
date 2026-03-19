@@ -40,6 +40,12 @@ Do NOT run in a worktree. Work directly in the current repository.
 
 ## Step 1: Read Existing Config (if any)
 
+**Target path (required):** Write only to **`.dev_cycle/project.md`** at the **repository root**
+(the hidden directory with a leading dot). Do **not** edit `dev_cycle/project.md` (no dot) —
+that is the workflow package’s install template, not the per-project config.
+
+If `.dev_cycle/` is missing, create it: `mkdir -p .dev_cycle`
+
 Check if `.dev_cycle/project.md` already exists and has content. If so, read it —
 you may be updating an existing config rather than starting from scratch.
 
@@ -83,7 +89,11 @@ Wait for the user's answers before proceeding.
 
 ## Step 3: Generate project.md
 
-Write `.dev_cycle/project.md` based on the user's answers. Use this structure:
+Overwrite **`.dev_cycle/project.md`** (not `dev_cycle/project.md`) with real values from the
+interview. Replace every `<!-- ... -->` placeholder from the template — the delivered file
+must read like a finished project brief, not a skeleton.
+
+Use this structure:
 
 ```markdown
 # Project Configuration
