@@ -8,12 +8,14 @@
 #   bash .agentic-dev-cycle/install.sh
 #
 # What it does:
-#   1. Symlinks .claude/skills/ → <absolute path to this repo>/skills/
-#   2. Bootstraps .dev_cycle/ in your project with all config templates
-#   3. Adds .dev_cycle/ and .claude/skills to .gitignore
-#   4. Does NOT overwrite existing config files (safe to re-run after updates)
+#   1a. Symlinks .claude/skills/ → skills/  (Claude Code slash commands)
+#   1b. Appends workflow routing to AGENTS.md  (Codex CLI + Gemini CLI)
+#   2.  Bootstraps .dev_cycle/ in your project with all config templates
+#   3.  Adds .dev_cycle/ and .claude/skills to .gitignore
+#   4.  Does NOT overwrite existing config files (safe to re-run after updates)
 #
-# After install, run /init-dev-cycle in Claude Code to configure for your project.
+# After install, run /init-dev-cycle (Claude Code), or ask your AI agent
+# to "init dev cycle" (Codex / Gemini) to configure for your project.
 #
 set -euo pipefail
 
@@ -45,7 +47,7 @@ echo "Agentic Dev Cycle — installing into $(basename "$PROJECT_ROOT")"
 echo ""
 
 # ---------------------------------------------------------------------------
-# Step 1: Symlink .claude/skills/
+# Step 1a: Symlink .claude/skills/  (Claude Code)
 # ---------------------------------------------------------------------------
 
 SKILLS_TARGET="$PROJECT_ROOT/.claude/skills"
@@ -62,6 +64,47 @@ elif [[ -d "$SKILLS_TARGET" ]]; then
 else
   ln -s "$SKILLS_SOURCE" "$SKILLS_TARGET"
   ok ".claude/skills → $SKILLS_SOURCE"
+fi
+
+# ---------------------------------------------------------------------------
+# Step 1b: AGENTS.md  (Codex CLI + Gemini CLI)
+# ---------------------------------------------------------------------------
+#
+# Both Codex CLI and Gemini CLI read AGENTS.md automatically from the project
+# root. We append a workflow section rather than overwrite, so existing content
+# is preserved.
+#
+AGENTS_FILE="$PROJECT_ROOT/AGENTS.md"
+AGENTS_MARKER="<!-- agentic-dev-cycle -->"
+
+if [[ -f "$AGENTS_FILE" ]] && grep -qF "$AGENTS_MARKER" "$AGENTS_FILE"; then
+  skip "AGENTS.md (workflow section already present)"
+else
+  cat >> "$AGENTS_FILE" <<EOF
+
+$AGENTS_MARKER
+## Agentic Dev Cycle Workflow
+
+This project uses a structured development workflow. When asked to perform
+any of the following tasks, read the corresponding instructions file first.
+
+| Task | Instructions |
+|------|-------------|
+| Design a feature / expand an idea | \`.dev_cycle/agents/design_agent.md\` |
+| Build a GitHub Issue | \`.dev_cycle/agents/build_agent.md\` |
+| Review a feature branch | \`.dev_cycle/agents/review_agent.md\` |
+| Fix a bug or PR | \`.dev_cycle/agents/fix_agent.md\` |
+| Deploy / start dev servers | \`.dev_cycle/agents/deploy_agent.md\` |
+| Complete a merged work order | \`skills/complete/SKILL.md\` |
+
+**Project config** (tech stack, architecture patterns, gate commands):
+\`.dev_cycle/project.md\`
+
+**Work orders:** GitHub Issues labeled \`dev-cycle:build\`
+**Past decisions:** GitHub Issues labeled \`dev-cycle:decision\` — always scan
+these before starting work on a new feature.
+EOF
+  ok "AGENTS.md — workflow section appended"
 fi
 
 # ---------------------------------------------------------------------------
@@ -172,6 +215,9 @@ fi
 add_gitignore_entry ".dev_cycle/"
 add_gitignore_entry ".claude/skills"
 
+# AGENTS.md is intentionally NOT gitignored — it should be committed so
+# Codex CLI and Gemini CLI users on the team get the workflow routing.
+
 echo ""
 echo "  Note: .dev_cycle/ is gitignored by default — your workflow state is private."
 echo "  Teams who want shared workflow state: remove '.dev_cycle/' from .gitignore"
@@ -185,18 +231,22 @@ echo ""
 echo -e "${GREEN}Install complete.${NC}"
 echo ""
 echo "Next steps:"
-echo "  1. Open Claude Code in your project"
-echo "  2. Run: /init-dev-cycle"
-echo "     This configures .dev_cycle/project.md, gates_config.sh, and agent instructions"
-echo "     for your specific tech stack."
-echo "  3. Ensure gh CLI is authenticated: gh auth login"
+echo "  1. Configure for your project:"
+echo "     Claude Code:  open project, run /init-dev-cycle"
+echo "     Codex CLI:    codex 'init dev cycle'"
+echo "     Gemini CLI:   gemini 'init dev cycle'"
+echo "     This generates .dev_cycle/project.md, gates_config.sh, and agent instructions."
+echo ""
+echo "  2. Ensure gh CLI is authenticated: gh auth login"
 echo "     (required for GitHub Issues integration)"
-echo "  4. Commit the generated files:"
-echo "     git add .dev_cycle/ .claude/skills"
+echo ""
+echo "  3. Commit the generated files:"
+echo "     git add .dev_cycle/ .claude/skills AGENTS.md"
 echo "     git commit -m 'dev_cycle: add agentic dev cycle workflow'"
 echo "     git push origin main"
 echo ""
-echo "  Note: .dev_cycle/ is gitignored by default. If you want your team to share"
-echo "  workflow state, remove '.dev_cycle/' from .gitignore and commit it."
+echo "  Note: .dev_cycle/ is gitignored by default (workflow state is private)."
+echo "  Teams: remove '.dev_cycle/' from .gitignore and commit it to share."
+echo "  AGENTS.md is committed — Codex/Gemini users get workflow routing automatically."
 echo ""
 echo "See .dev_cycle/workflow.md for the full development process."
