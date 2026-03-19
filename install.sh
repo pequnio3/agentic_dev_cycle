@@ -2,10 +2,14 @@
 #
 # Agentic Dev Cycle — Project Install Script
 #
-# Run this once from your project root after adding this repo as a submodule:
+# Clone this repo once, then run it against any project:
 #
-#   git submodule add <url> .agentic-dev-cycle
-#   bash .agentic-dev-cycle/install.sh
+#   git clone https://github.com/pequnio3/agentic_dev_cycle ~/tools/agentic-dev-cycle
+#   bash ~/tools/agentic-dev-cycle/install.sh /path/to/your/project
+#
+# Or from inside your project root (no argument needed):
+#
+#   bash ~/tools/agentic-dev-cycle/install.sh
 #
 # What it does:
 #   1a. Symlinks .claude/skills/ → skills/  (Claude Code slash commands)
@@ -24,12 +28,19 @@ set -euo pipefail
 # ---------------------------------------------------------------------------
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="$(pwd)"
+PROJECT_ROOT="${1:-$(pwd)}"
+PROJECT_ROOT="$(cd "$PROJECT_ROOT" && pwd)"
 
-# Safety check: ensure we're not running from inside the submodule itself
+# Safety check: ensure we're not installing into the tool repo itself
 if [[ "$PROJECT_ROOT" == "$SCRIPT_DIR" ]]; then
-  echo "Error: run this script from your project root, not from inside the submodule."
-  echo "Usage: bash .agentic-dev-cycle/install.sh"
+  echo "Error: target directory is the tool repo itself."
+  echo "Usage: bash install.sh /path/to/your/project"
+  exit 1
+fi
+
+# Safety check: ensure target exists
+if [[ ! -d "$PROJECT_ROOT" ]]; then
+  echo "Error: target directory does not exist: $PROJECT_ROOT"
   exit 1
 fi
 
