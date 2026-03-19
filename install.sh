@@ -119,6 +119,53 @@ EOF
 fi
 
 # ---------------------------------------------------------------------------
+# Step 1c: .cursor/rules/dev-cycle.mdc  (Cursor Composer)
+# ---------------------------------------------------------------------------
+#
+# Cursor reads .cursor/rules/*.mdc files automatically in every Composer
+# session when alwaysApply: true is set. This gives Composer the workflow
+# routing without the user needing to manually reference files.
+#
+CURSOR_RULES_DIR="$PROJECT_ROOT/.cursor/rules"
+CURSOR_RULE_FILE="$CURSOR_RULES_DIR/dev-cycle.mdc"
+
+mkdir -p "$CURSOR_RULES_DIR"
+
+if [[ -f "$CURSOR_RULE_FILE" ]]; then
+  skip ".cursor/rules/dev-cycle.mdc"
+else
+  cat > "$CURSOR_RULE_FILE" <<'EOF'
+---
+description: Agentic dev cycle workflow routing
+alwaysApply: true
+---
+
+## Agentic Dev Cycle Workflow
+
+This project uses a structured development workflow. When asked to perform
+any of the following tasks, read the corresponding instructions file first
+before doing anything else.
+
+| Task | Instructions |
+|------|-------------|
+| Design a feature / expand an idea | `.dev_cycle/agents/design_agent.md` |
+| Build a GitHub Issue | `.dev_cycle/agents/build_agent.md` |
+| Review a feature branch | `.dev_cycle/agents/review_agent.md` |
+| Fix a bug or PR | `.dev_cycle/agents/fix_agent.md` |
+| Deploy / start dev servers | `.dev_cycle/agents/deploy_agent.md` |
+| Complete a merged work order | `skills/complete/SKILL.md` |
+
+**Project config** (tech stack, architecture patterns, gate commands):
+`.dev_cycle/project.md`
+
+**Work orders:** GitHub Issues labeled `dev-cycle:build`
+**Past decisions:** GitHub Issues labeled `dev-cycle:decision` — scan
+these before starting work on any new feature.
+EOF
+  ok ".cursor/rules/dev-cycle.mdc"
+fi
+
+# ---------------------------------------------------------------------------
 # Step 2: Check GitHub CLI
 # ---------------------------------------------------------------------------
 
@@ -226,8 +273,8 @@ fi
 add_gitignore_entry ".dev_cycle/"
 add_gitignore_entry ".claude/skills"
 
-# AGENTS.md is intentionally NOT gitignored — it should be committed so
-# Codex CLI and Gemini CLI users on the team get the workflow routing.
+# AGENTS.md and .cursor/rules/dev-cycle.mdc are intentionally NOT gitignored
+# — commit them so all team members get workflow routing regardless of their AI tool.
 
 echo ""
 echo "  Note: .dev_cycle/ is gitignored by default — your workflow state is private."
@@ -244,6 +291,7 @@ echo ""
 echo "Next steps:"
 echo "  1. Configure for your project:"
 echo "     Claude Code:  open project, run /init-dev-cycle"
+echo "     Cursor:       open Composer, type 'init dev cycle'"
 echo "     Codex CLI:    codex 'init dev cycle'"
 echo "     Gemini CLI:   gemini 'init dev cycle'"
 echo "     This generates .dev_cycle/project.md, gates_config.sh, and agent instructions."
@@ -252,7 +300,7 @@ echo "  2. Ensure gh CLI is authenticated: gh auth login"
 echo "     (required for GitHub Issues integration)"
 echo ""
 echo "  3. Commit the generated files:"
-echo "     git add .dev_cycle/ .claude/skills AGENTS.md"
+echo "     git add .dev_cycle/ .claude/skills AGENTS.md .cursor/rules/dev-cycle.mdc"
 echo "     git commit -m 'dev_cycle: add agentic dev cycle workflow'"
 echo "     git push origin main"
 echo ""

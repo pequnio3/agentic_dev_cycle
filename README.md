@@ -51,6 +51,7 @@ bash ~/tools/agentic-dev-cycle/install.sh
 The install script:
 - Symlinks `.claude/skills/` → the tool's `skills/` dir (absolute path) — Claude Code slash commands
 - Appends a workflow routing section to `AGENTS.md` — Codex CLI and Gemini CLI support
+- Creates `.cursor/rules/dev-cycle.mdc` — auto-loaded into every Cursor Composer session
 - Copies config templates to `.dev_cycle/` in your project
 - Checks for `gh` CLI authentication (required for GitHub Issues integration)
 - Adds `.dev_cycle/` and `.claude/skills` to `.gitignore`
@@ -75,7 +76,7 @@ Teams who want shared workflow state: remove `.dev_cycle/` from `.gitignore` and
 
 ```bash
 # If opting into team mode (shared workflow state):
-git add .dev_cycle/ AGENTS.md
+git add .dev_cycle/ AGENTS.md .cursor/rules/dev-cycle.mdc
 git commit -m "dev_cycle: init for <project name>"
 git push origin main
 ```
@@ -390,6 +391,10 @@ After install and init, your project will have:
   dev_cycle/                 ← templates and generic docs (source)
 
 AGENTS.md                    ← workflow routing for Codex + Gemini (committed)
+
+.cursor/
+  rules/
+    dev-cycle.mdc            ← auto-loaded into every Cursor Composer session (committed)
 
 .claude/
   skills -> ~/tools/agentic-dev-cycle/skills   ← symlink (created by install.sh)
