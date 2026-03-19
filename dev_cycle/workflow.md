@@ -195,7 +195,9 @@ The build agent (in isolated worktree):
 5. **Implements with TDD** — red/green/commit per task
 6. Runs gate check after each wave (`gates.sh wave`)
 7. **All scenarios must pass** before creating PR (if present)
-8. Pushes branch and creates PR with `Closes #<N>`
+8. Pushes branch and creates a PR whose body includes **manual QA steps** (from Idea +
+   Scenarios), a **rough LLM token estimate** table (build + review — order-of-magnitude
+   only), and `Closes #<N>`.
 
 9. **Main agent chains `/review`** for that issue (feature branch + PR URL passed in).
    Skip this only if the user asked for build-only.

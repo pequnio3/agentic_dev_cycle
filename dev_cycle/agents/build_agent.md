@@ -145,6 +145,32 @@ gh pr create --base main --title "feat(<slug>-<N>): short description" --body "$
 - [ ] Scenarios: <N / N passing> (or N/A)
 - [ ] Gate checks clean
 
+## How to test (manual QA)
+
+Give **numbered steps** a reviewer can follow without reading code — derived from the **Idea**
+and **Scenarios** sections of the work order. Include:
+
+- **Prereqs:** branch checked out, env vars, seed data, local URLs/ports (from `.dev_cycle/project.md` if relevant)
+- **Happy path:** the main user flow end-to-end
+- **Edge cases:** at least the scenarios that are easiest to miss (errors, empty state, auth)
+- **Automated checks:** exact commands (e.g. `./.dev_cycle/gates.sh pre-pr`, targeted tests) and what “green” looks like
+
+If there are **no** UI/API scenarios, still list how to **prove** the change (command + expected output).
+
+## Estimated LLM usage (very rough)
+
+These are **order-of-magnitude guesses** for **similar** agent work (not billing quotes).
+Base them on: models from `.dev_cycle/project.md`, count of manifest files touched, waves,
+scenario count, and how much exploration you actually did.
+
+| | Est. input tokens | Est. output tokens |
+|--|------------------|-------------------|
+| **Build (this PR)** | ~<low>k–<high>k | ~<low>k–<high>k |
+| **One `/review` pass** (Sonnet, same scope) | ~<low>k–<high>k | ~<low>k–<high>k |
+| **Re-run from scratch** (build + review) | ~<sum>k–<sum>k | ~<sum>k–<sum>k |
+
+Add **one line** under the table explaining the main drivers (e.g. “High estimate: large manifest + Opus build + 6 scenarios”).
+
 Closes #<N>
 
 🤖 Generated with [Claude Code](https://claude.com/claude-code)
@@ -164,4 +190,5 @@ For each work order built, report:
 - Gate check result
 - Scenarios: N / N passing (or N/A if no Scenarios section)
 - All Idea requirements covered: yes/no
+- The **manual QA** and **token estimate** blocks you put in the PR body (one-line recap)
 - Any concerns

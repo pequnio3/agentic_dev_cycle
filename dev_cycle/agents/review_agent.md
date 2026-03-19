@@ -129,6 +129,28 @@ All checks must pass. Fix any failures until clean.
 
 ---
 
+## Step 7b: PR body — manual QA & token note (if needed)
+
+Open the PR on GitHub. If your fixes **change** how a human should verify the work, or the
+**rough token table** in the PR is now misleading, update the PR description **or** add a
+top-level comment:
+
+```bash
+gh pr view <PR#> --web   # or use --json url
+gh pr comment <PR#> --body "$(cat <<'EOF'
+### Updated manual QA (post-review)
+<numbered steps if behavior or entrypoints changed>
+
+### Token estimate tweak (still rough)
+<revised one-liner or small table if scope shifted materially>
+EOF
+)"
+```
+
+If the build agent’s **How to test** section is still accurate, skip this step.
+
+---
+
 ## Step 8: Update Work Order File
 
 Update the work order:
@@ -148,4 +170,5 @@ When done, report:
 - Scenarios: N / N passing (or N/A)
 - Summary of issues found and fixed
 - Test coverage added
+- Whether you added a PR comment to refresh **manual QA** / **token estimate**
 - Any remaining concerns for the human reviewer

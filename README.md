@@ -193,6 +193,10 @@ The agent commits and the main session creates the GitHub Issues.
 ### Fixing bugs found during validation
 
 After `/build`, the PR already exists and automated `/review` updates that branch.
+Build agents are instructed to include **How to test (manual QA)** steps and a **very rough
+estimated LLM token** table (build + review) in the PR body — use those as a starting
+checklist; they are not exact usage reports.
+
 Check out the PR branch and test manually. If you find
 issues, describe them to `/fix`:
 
