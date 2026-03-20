@@ -108,7 +108,10 @@ From each title `feat(<slug>-<k>): …`, parse **work-order index** `<k>` (integ
 
 5. When every planned issue has been built (and reviewed per policy), summarize all PRs and review outcomes.
 
-**Why only one background build per series at a time:** Preserves order and avoids two worktrees racing on the same slug/mainline expectations; matches dependency chains where `feat(slug-2)` waits on `feat(slug-1)` reaching `dev-cycle:review` / `dev-cycle:done`.
+**Why only one background build per series at a time:** Preserves order, avoids two
+worktrees racing the same slug, and ensures **`origin/dev-<slug>-k`** exists (or predecessor
+is merged) before the next agent runs **`git checkout -B … origin/dev-<slug>-(k-1)`** for
+stacked same-slug chains.
 
 ---
 

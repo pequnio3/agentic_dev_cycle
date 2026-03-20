@@ -78,14 +78,48 @@ take more than 35 minutes, split it or report back.
 
 ## Step 4: Create Feature Branch
 
-Rename the worktree branch to the work order's branch name:
+Read **`Branch:`** and **`Depends on:`** from the work order header.
+
+### Same-slug chain (stacked branches)
+
+When **`Depends on:`** names the **immediate predecessor** work order for the **same**
+feature slug (e.g. current `feat(A-3)`, depends `A-2`, which depends `A-1`):
+
+- **Git lineage:** this branch must grow from the **predecessor’s branch tip**, not from
+  an empty `main` checkout — so **A-2** branches off **A-1’s** branch, **A-3** off **A-2’s**.
+- **PR target:** still open the PR **into `main`** (`gh pr create --base main`). GitHub will
+  show combined commits until earlier PRs merge; after the predecessor merges, **rebase or
+  merge `main` into this branch** if GitHub asks or CI fails.
+
+**Procedure:**
+
+1. `git fetch origin`
+2. Resolve **predecessor branch name** `P`:
+   - From `Depends on: A-2` (slug-index) → convention **`dev-A-2`** (same pattern as your
+     `Branch:` line: `dev-<slug>-N`).
+   - If unsure, `gh issue view` the dependency issue and read its **`Branch:`** field.
+3. If **`origin/P` exists** (predecessor has been pushed — normal after `/review` of the prior
+   item in a series):
 
 ```bash
-git branch -m <branch-name-from-work-order>
+git checkout -B <Branch-from-work-order> "origin/P"
 ```
 
-For chained work orders, the dependency's code is already on main (merged).
-Branch from main — no stacking needed.
+4. If **`origin/P` does not exist** (predecessor already **merged** to `main` — stack
+   collapsed): create your branch from **`origin/main`** — the predecessor’s commits are
+   already there.
+
+```bash
+git checkout -B <Branch-from-work-order> origin/main
+```
+
+5. If **`Depends on: none`** (or dependency is **another slug** / cross-feature): branch from
+   **`origin/main`**. Cross-feature dependencies should usually be **merged** before you
+   start; if not, follow the design’s merge order and report blockers.
+
+Document in **Implementation Notes** and in the **PR body** (add a **Stack / merge order**
+subsection): predecessor branch you cut from, and that reviewers should **merge earlier PRs
+in the chain first** (or rebase this PR after they land).
 
 ---
 
@@ -170,6 +204,11 @@ scenario count, and how much exploration you actually did.
 | **Re-run from scratch** (build + review) | ~<sum>k–<sum>k | ~<sum>k–<sum>k |
 
 Add **one line** under the table explaining the main drivers (e.g. “High estimate: large manifest + Opus build + 6 scenarios”).
+
+## Stack / merge order *(if branched off a predecessor work order)*
+
+- **Branched from:** `origin/<predecessor-branch>` *(or `origin/main` if predecessor merged)*
+- **PR base:** `main` — merge **predecessor PR(s)** first when possible; if `main` moved after they landed, sync this branch before merge.
 
 Closes #<N>
 

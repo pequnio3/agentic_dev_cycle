@@ -351,11 +351,18 @@ These research-backed thresholds inform the workflow design:
 ### Independent features
 Branch from `main`, merge in any order.
 
-### Dependent features (chains)
-The `Depends on:` field in the GitHub Issue body marks the dependency.
-The build skill checks this before spawning. Phase 2 won't start until Phase 1 is
-labeled `dev-cycle:review` or `dev-cycle:done`. When Phase 2 does start, the agent
-branches from main (Phase 1 is already merged) — no stacking required.
+### Dependent features (chains, same slug)
+
+The `Depends on:` field marks the predecessor work order (e.g. `A-2` depends on `A-1`).
+The build skill still requires the predecessor to reach `dev-cycle:review` or
+`dev-cycle:done` before the next build spawns (so its branch exists on `origin` or its
+commits are on `main`).
+
+**Stacked git branches:** For **A-1 → A-2 → A-3**, **A-2** is created from **`origin/dev-A-1`**
+(tip of A-1’s branch), **A-3** from **`origin/dev-A-2`**. Each PR still **targets `main`**.
+Merge **earlier PRs in the chain first** (or rebase later branches onto `main` after
+predecessors merge). If a predecessor is already **merged**, the next branch cuts from
+**`origin/main`** instead.
 
 ## Tips
 

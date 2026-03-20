@@ -41,7 +41,16 @@ Do NOT read files not in the work order's Context Manifest.
 git diff main...HEAD --stat
 ```
 
-For chained work orders, diff against the parent branch instead of main.
+For **stacked** same-slug chains (this branch was cut from `origin/dev-<slug>-(k-1)`),
+also show scope of **this** phase:
+
+```bash
+git diff "origin/dev-<slug>-(k-1)...HEAD" --stat
+```
+
+(use the real predecessor branch from `Depends on:` / work order header). Prefer reviewing
+the **incremental** diff for spec drift on *this* work order; use `main...HEAD` to see full
+stack vs merge target.
 Read every changed file. Understand what was built and how.
 
 ---

@@ -247,9 +247,12 @@ If Phase 2 builds on Phase 1, the issue body marks the dependency:
 Depends on: auth-scaffold-1
 ```
 
-The build skill checks this before spawning. Phase 2 won't start until Phase 1's issue
-is labeled `dev-cycle:review` or `dev-cycle:done`. When it does start, the agent branches
-from main (Phase 1 is already merged) — no stacking required.
+The build skill checks this before spawning. Phase 2 won’t start until Phase 1’s issue
+is `dev-cycle:review` or `dev-cycle:done`. For **same-slug** chains (**A-1**, **A-2**, **A-3**),
+later phases **branch from the predecessor’s remote branch** (`origin/dev-A-1`, then
+`origin/dev-A-2`); every PR still **opens against `main`**. Merge earlier PRs first (or
+rebase after they land). If the predecessor is already merged, the next branch starts
+from **`main`**.
 
 ---
 
