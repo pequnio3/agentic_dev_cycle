@@ -52,13 +52,15 @@ The install script:
 - Symlinks `.dev_cycle/skills` → the tool's `dev_cycle/skills/` (canonical skill bundle)
 - Adds `.claude/skills/dev_cycle` → `.dev_cycle/skills`, plus flat per-skill symlinks under `.claude/skills/` so `/design`, `/build`, etc. work in Claude Code
 - Mirrors the same layout under `.cursor/skills/` (Cursor Agent Skills), `.agents/skills/` (Codex + Gemini CLI repo skills), and `.gemini/skills/` (Gemini CLI workspace path)
-- Appends a workflow routing section to `AGENTS.md` — Codex CLI and Gemini CLI support
-- Creates `.cursor/rules/dev-cycle.mdc` — auto-loaded into every Cursor Composer session
-- Copies config templates to `.dev_cycle/` in your project
+- Writes / refreshes the workflow block in `AGENTS.md` (Codex + Gemini) — delimited by HTML comments so reinstall can replace it
+- Overwrites `.cursor/rules/dev-cycle.mdc` — auto-loaded into every Cursor Composer session
+- **Overwrites** bundled templates in `.dev_cycle/` (`gates.sh`, `gates_config.sh`, `project.md`, `agents/*.md`, `workflow.md`) so a reinstall picks up tool updates
 - Checks for `gh` CLI authentication (required for GitHub Issues integration)
 - Adds `.dev_cycle/` and the skill hub directories to `.gitignore`
 
-To update the tool later, just `git pull` in `~/tools/agentic-dev-cycle` — no changes needed in your projects.
+**Updating the workflow in an existing project:** `git pull` in the tool repo, run `install.sh` again on your project (refreshes skills, templates, and routing), then run **`/init-dev-cycle`** (or `"init dev cycle"`) to regenerate **project-specific** `project.md`, `gates_config.sh`, and tailored `agents/*.md`.
+
+To preserve old files instead of overwriting, run: `AGENTIC_DEV_CYCLE_NO_OVERWRITE=1 bash …/install.sh`
 
 Then configure for your project. Open Claude Code and run:
 

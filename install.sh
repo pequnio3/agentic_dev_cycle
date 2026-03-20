@@ -17,9 +17,13 @@
 #        .agents/skills/dev_cycle, .gemini/skills/dev_cycle — each also gets flat
 #        per-skill symlinks so Claude/Cursor discover /design, /build, etc.
 #   1b. Appends workflow routing to AGENTS.md  (Codex CLI + Gemini CLI)
-#   2.  Bootstraps .dev_cycle/ in your project with all config templates
+#   2.  Bootstraps .dev_cycle/ — copies templates and reference docs (overwrites on re-run)
 #   3.  Adds .dev_cycle/ and skill hub paths to .gitignore
-#   4.  Does NOT overwrite existing config files (safe to re-run after updates)
+#   4.  Refreshes AGENTS.md workflow block + .cursor/rules/dev-cycle.mdc from this tool
+#
+# Re-run after `git pull` in the tool repo to pick up workflow changes, then run
+# /init-dev-cycle (or "init dev cycle") to regenerate project-specific files.
+# Set AGENTIC_DEV_CYCLE_NO_OVERWRITE=1 to restore old skip-if-exists behavior for files only.
 #
 # After install, run /init-dev-cycle (Claude Code), or ask your AI agent
 # to "init dev cycle" (Codex / Gemini) to configure for your project.
@@ -56,6 +60,12 @@ ok()   { echo -e "${GREEN}✓${NC} $1"; }
 info() { echo -e "${BLUE}→${NC} $1"; }
 skip() { echo -e "${YELLOW}↷${NC} $1 (already exists — skipped)"; }
 
+# Default: overwrite templates and routing files so `git pull` + reinstall refreshes the core.
+OVERWRITE_INSTALL=true
+if [[ "${AGENTIC_DEV_CYCLE_NO_OVERWRITE:-}" == "1" ]]; then
+  OVERWRITE_INSTALL=false
+fi
+
 # Canonical skills live under .dev_cycle/skills (points at this repo's dev_cycle/skills).
 # Each tool hub gets dev_cycle → .dev_cycle/skills plus one symlink per skill at the
 # hub root (Claude/Cursor scan immediate children; dev_cycle/ has no SKILL.md at root).
@@ -67,13 +77,16 @@ link_skill_hub() {
   mkdir -p "$hub_abs"
 
   local bundle="$hub_abs/dev_cycle"
-  if [[ -L "$bundle" ]]; then
-    skip "$hub_rel/dev_cycle"
-  elif [[ -e "$bundle" ]]; then
+  if [[ -e "$bundle" ]] && [[ ! -L "$bundle" ]]; then
     echo "Warning: $hub_rel/dev_cycle exists and is not a symlink — not overwriting."
-  else
-    ln -s "../../.dev_cycle/skills" "$bundle"
+  elif $OVERWRITE_INSTALL; then
+    ln -sfn "../../.dev_cycle/skills" "$bundle"
     ok "$hub_rel/dev_cycle → .dev_cycle/skills"
+  elif [[ ! -e "$bundle" ]]; then
+    ln -sfn "../../.dev_cycle/skills" "$bundle"
+    ok "$hub_rel/dev_cycle → .dev_cycle/skills"
+  else
+    skip "$hub_rel/dev_cycle"
   fi
 
   local potential name link
@@ -82,13 +95,16 @@ link_skill_hub() {
     [[ -f "$potential/SKILL.md" ]] || continue
     name="$(basename "$potential")"
     link="$hub_abs/$name"
-    if [[ -L "$link" ]]; then
-      skip "$hub_rel/$name"
-    elif [[ -e "$link" ]]; then
+    if [[ -e "$link" ]] && [[ ! -L "$link" ]]; then
       echo "Warning: $hub_rel/$name exists and is not a symlink — not overwriting."
-    else
-      ln -s "../../.dev_cycle/skills/$name" "$link"
+    elif $OVERWRITE_INSTALL; then
+      ln -sfn "../../.dev_cycle/skills/$name" "$link"
       ok "$hub_rel/$name → .dev_cycle/skills/$name"
+    elif [[ ! -e "$link" ]]; then
+      ln -sfn "../../.dev_cycle/skills/$name" "$link"
+      ok "$hub_rel/$name → .dev_cycle/skills/$name"
+    else
+      skip "$hub_rel/$name"
     fi
   done
 }
@@ -106,14 +122,17 @@ mkdir -p "$PROJECT_ROOT/.dev_cycle"
 DEV_CYCLE_SKILLS="$PROJECT_ROOT/.dev_cycle/skills"
 BUNDLED_SKILLS="$SCRIPT_DIR/dev_cycle/skills"
 
-if [[ -L "$DEV_CYCLE_SKILLS" ]]; then
-  skip ".dev_cycle/skills symlink"
-elif [[ -d "$DEV_CYCLE_SKILLS" ]] && [[ ! -L "$DEV_CYCLE_SKILLS" ]]; then
+if [[ -d "$DEV_CYCLE_SKILLS" ]] && [[ ! -L "$DEV_CYCLE_SKILLS" ]]; then
   echo "Warning: .dev_cycle/skills/ exists as a real directory, not a symlink."
   echo "Back it up and re-run install, or remove it if you want the bundled skills."
-else
-  ln -s "$BUNDLED_SKILLS" "$DEV_CYCLE_SKILLS"
+elif $OVERWRITE_INSTALL && [[ -L "$DEV_CYCLE_SKILLS" ]]; then
+  ln -sfn "$BUNDLED_SKILLS" "$DEV_CYCLE_SKILLS"
+  ok ".dev_cycle/skills → $BUNDLED_SKILLS (refreshed)"
+elif [[ ! -e "$DEV_CYCLE_SKILLS" ]]; then
+  ln -sfn "$BUNDLED_SKILLS" "$DEV_CYCLE_SKILLS"
   ok ".dev_cycle/skills → $BUNDLED_SKILLS"
+else
+  skip ".dev_cycle/skills symlink"
 fi
 
 # Legacy: entire .claude/skills was a single symlink to the tool skills dir
@@ -134,16 +153,28 @@ link_skill_hub ".gemini/skills"
 # Step 1b: AGENTS.md  (Codex CLI + Gemini CLI)
 # ---------------------------------------------------------------------------
 #
-# Both Codex CLI and Gemini CLI read AGENTS.md automatically from the project
-# root. We append a workflow section rather than overwrite, so existing content
-# is preserved.
+# Both Codex CLI and Gemini CLI read AGENTS.md from the project root.
+# With overwrite: strip the old workflow block (start/end markers) and append fresh.
 #
 AGENTS_FILE="$PROJECT_ROOT/AGENTS.md"
 AGENTS_MARKER="<!-- agentic-dev-cycle -->"
+AGENTS_END="<!-- /agentic-dev-cycle -->"
 
-if [[ -f "$AGENTS_FILE" ]] && grep -qF "$AGENTS_MARKER" "$AGENTS_FILE"; then
-  skip "AGENTS.md (workflow section already present)"
+if ! $OVERWRITE_INSTALL && [[ -f "$AGENTS_FILE" ]] && grep -qF "$AGENTS_MARKER" "$AGENTS_FILE"; then
+  skip "AGENTS.md (workflow section — skipped; rerun without AGENTIC_DEV_CYCLE_NO_OVERWRITE=1 to refresh)"
 else
+  if [[ -f "$AGENTS_FILE" ]]; then
+    agents_tmp="$(mktemp)"
+    awk '
+      /^<!-- agentic-dev-cycle -->$/ { skip=1; next }
+      /^<!-- \/agentic-dev-cycle -->$/ { skip=0; next }
+      skip { next }
+      { print }
+    ' "$AGENTS_FILE" > "$agents_tmp"
+    mv "$agents_tmp" "$AGENTS_FILE"
+  else
+    touch "$AGENTS_FILE"
+  fi
   cat >> "$AGENTS_FILE" <<EOF
 
 $AGENTS_MARKER
@@ -167,8 +198,10 @@ any of the following tasks, read the corresponding instructions file first.
 **Work orders:** GitHub Issues labeled \`dev-cycle:build\`
 **Past decisions:** GitHub Issues labeled \`dev-cycle:decision\` — always scan
 these before starting work on a new feature.
+
+$AGENTS_END
 EOF
-  ok "AGENTS.md — workflow section appended"
+  ok "AGENTS.md — workflow section updated"
 fi
 
 # ---------------------------------------------------------------------------
@@ -184,7 +217,7 @@ CURSOR_RULE_FILE="$CURSOR_RULES_DIR/dev-cycle.mdc"
 
 mkdir -p "$CURSOR_RULES_DIR"
 
-if [[ -f "$CURSOR_RULE_FILE" ]]; then
+if ! $OVERWRITE_INSTALL && [[ -f "$CURSOR_RULE_FILE" ]]; then
   skip ".cursor/rules/dev-cycle.mdc"
 else
   cat > "$CURSOR_RULE_FILE" <<'EOF'
@@ -252,19 +285,24 @@ do
 done
 
 # ---------------------------------------------------------------------------
-# Step 4: Copy template files (skip if already present)
+# Step 4: Copy template files (overwrite by default)
 # ---------------------------------------------------------------------------
 
 copy_template() {
   local src="$1"
   local dst="$2"
-  if [[ ! -f "$dst" ]]; then
-    cp "$src" "$dst"
-    ok "$(basename "$dst")"
-  else
+  if ! $OVERWRITE_INSTALL && [[ -f "$dst" ]]; then
     skip "$(basename "$dst")"
+    return
   fi
+  cp "$src" "$dst"
+  ok "$(basename "$dst")"
 }
+
+if $OVERWRITE_INSTALL; then
+  info "Refreshing .dev_cycle templates from tool (overwrites existing copies)."
+  info "Re-run /init-dev-cycle afterward to regenerate project-specific project.md, gates_config.sh, and agents."
+fi
 
 info "Copying config templates to .dev_cycle/..."
 copy_template "$SCRIPT_DIR/dev_cycle/gates.sh"        "$PROJECT_ROOT/.dev_cycle/gates.sh"
@@ -283,9 +321,11 @@ done
 # Decisions are stored as GitHub Issues labeled "dev-cycle:decision"
 # No local file needed — created automatically by /complete
 
-# Copy workflow docs (always take from submodule — these are reference, not config)
+# Copy workflow docs (reference — overwrite when install overwrites)
 for doc in workflow.md; do
-  if [[ ! -f "$PROJECT_ROOT/.dev_cycle/$doc" ]]; then
+  if ! $OVERWRITE_INSTALL && [[ -f "$PROJECT_ROOT/.dev_cycle/$doc" ]]; then
+    skip "$doc"
+  else
     cp "$SCRIPT_DIR/dev_cycle/$doc" "$PROJECT_ROOT/.dev_cycle/$doc"
     ok "$doc"
   fi
@@ -344,6 +384,12 @@ echo "  and commit it to main."
 echo ""
 echo -e "${GREEN}Install complete.${NC}"
 echo ""
+if $OVERWRITE_INSTALL; then
+  echo "  Templates and routing were refreshed from this tool. If this was an upgrade,"
+  echo "  run /init-dev-cycle (or \"init dev cycle\") again to regenerate project-specific"
+  echo "  project.md, gates_config.sh, and agents/*.md."
+  echo ""
+fi
 echo "Next steps:"
 echo "  1. Configure for your project:"
 echo "     Claude Code:  open project, run /init-dev-cycle"
