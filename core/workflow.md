@@ -1,0 +1,370 @@
+# Development Workflow
+
+How to build features using Claude Code skills.
+
+## Installation
+
+Add this repo as a submodule, then run the install script:
+
+```bash
+git submodule add <repo-url> .agentic-dev-cycle
+bash .agentic-dev-cycle/install.sh
+```
+
+The install script:
+- Symlinks `.dev_cycle/skills` → `.agentic-dev-cycle/core/skills/` (canonical bundle)
+- Adds `.claude/skills/dev_cycle` → `.dev_cycle/skills` and per-skill symlinks for Claude slash commands; mirrors under `.cursor/skills/`, `.agents/skills/`, and `.gemini/skills/`
+- Copies config templates to `.dev_cycle/` in your project
+- Creates the design and prompts directories
+- Checks for `gh` CLI authentication (required for GitHub Issues integration)
+
+Then configure for your project:
+
+```bash
+# In Claude Code:
+/init-dev-cycle
+```
+
+`/init-dev-cycle` asks about your tech stack and generates:
+- `.dev_cycle/project.yaml` — tech stack, architecture patterns, implementation phases, models per agent, gate summaries
+- `.dev_cycle/gates_config.sh` — build/test/lint commands sourced by `gates.sh`
+- `.dev_cycle/agents/<name>/custom.md` — personality merged with `base.md` from the tool bundle
+
+Commit everything to main so agents running in worktrees can find it:
+
+```bash
+git add .dev_cycle/ .claude/skills
+git commit -m "dev_cycle: init for <project name>"
+git push origin main
+```
+
+Edit `.dev_cycle/project.yaml` anytime to update config. Always commit + push after changes.
+
+---
+
+## Overview
+
+Six-skill pipeline with two human gates:
+
+```
+/design   →  raw idea → structured design doc + BDD scenarios
+              ↓ (you approve → GitHub Issues created automatically)
+              ↓ (you confirm "yes" → build starts)
+/build    →  GitHub Issues → branch + PR (worktree), then **chains /review** on that branch
+/review   →  (also standalone) verify spec, scenarios, gates; fix and push on the same PR branch
+              ↓ (you validate and merge)
+/fix      →  targeted fixes for issues found during validation
+/complete →  close issue, capture learnings as GitHub Issues (dev-cycle:decision)
+/deploy   →  start dev servers, monitor logs, auto-fix errors
+```
+
+The two gates are:
+1. **Design approval** — you review the design doc and scenarios before anything gets built
+2. **Build confirmation** — you confirm before agents spin up (after seeing the issue list)
+
+`/queue` still exists for manual use (re-queuing, batching, adjusting before build)
+but is no longer a required step in the normal flow.
+
+## Skills
+
+Skills live in `.dev_cycle/skills/` (installed as a symlink to the tool's `core/skills/`) and are invoked as slash commands:
+
+| Skill | Model | What it does |
+|-------|-------|-------------|
+| `/init-dev-cycle` | Sonnet | One-time setup: interviews you, generates project.yaml + gate config + agent prompts |
+| `/design` | Opus | Expands idea → design doc + scenarios → creates GitHub Issues → confirms build |
+| `/queue` | — | Manual: re-queue after edits, batch multiple designs, or queue without building |
+| `/build` | Opus | Parallel, next, or orchestrated series (`<slug> <i>-<j>` / `--all`); separate agent per issue in series |
+| `/review` | Sonnet | Same review pass (manual trigger or chained from `/build`) |
+| `/fix` | Sonnet | Targeted fixes for validation bugs, scoped context only |
+| `/complete` | — | Closes GitHub Issue, captures decisions and gotchas |
+| `/deploy` | Sonnet | Dev servers: no arg = current branch; `#N`/`N` = PR; else `dev-<arg>` |
+
+## Directory Layout
+
+**Tool repo** (the submodule at `.agentic-dev-cycle/`):
+
+```
+core/
+  skills/                     ← skill definitions (how to do the work)
+    init-dev-cycle/SKILL.md   ← project setup
+    design/SKILL.md
+    queue/SKILL.md
+    build/SKILL.md
+    review/SKILL.md
+    fix/SKILL.md
+    complete/SKILL.md
+    deploy/SKILL.md
+  workflow.md                 ← this file (templates + generic docs)
+  project.yaml                ← starter project config template
+  issue_template.md           ← template for GitHub Issue bodies
+  gates.sh                    ← executable verification gates (project-agnostic)
+  gates_config.sh             ← project-specific gate commands (sourced by gates.sh)
+  agents/                     ← generic agent templates: <name>/{base,custom}.md
+```
+
+**Your project** (installed by `install.sh`):
+
+```
+.dev_cycle/                   ← state + config (the work itself, hidden by default)
+  skills/                     ← symlink → .agentic-dev-cycle/core/skills (from install.sh)
+  workflow.md                 ← workflow documentation
+  project.yaml                ← project config: tech stack, patterns, models, commands
+  gates.sh                    ← executable verification gates (project-agnostic)
+  gates_config.sh             ← project-specific gate commands (sourced by gates.sh)
+  agents/                     ← base.md (from tool) + custom.md (from /init-dev-cycle)
+    design/ build/ review/ fix/ deploy/ init/  … each with base.md + custom.md
+  design/                     ← draft scratch space for design agent output
+```
+
+**GitHub Issues** (work order queue and decision tracking):
+- Label `dev-cycle:build` — queued, ready to build
+- Label `dev-cycle:review` — built, PR open
+- Label `dev-cycle:done` — merged and complete
+- Label `dev-cycle:decision` — architectural decision or gotcha for future agents
+
+## Feature Lifecycle
+
+### Phase 1: Design (you + `/design`)
+
+Write a raw idea — a bug report, feature request, or rough concept. Can be
+as informal as a few sentences. Place it in `design/` with any name.
+
+```
+/design .dev_cycle/design/my_idea.md
+```
+
+The design agent:
+1. Reads the raw idea and project context
+2. Interrogates from UX/UI, technical, edge-case, and scope perspectives
+3. Assesses complexity (simple/medium/large) and adds architecture check for medium+
+4. Produces a structured design doc
+5. **Drafts BDD scenarios** — acceptance criteria derived from the design
+6. Writes it back to the same file
+
+**BDD Scenarios** are written at the appropriate level for the feature type:
+UI features get user flow scenarios, API features get contract scenarios, data
+features get invariant scenarios. Infrastructure/refactor work skips scenarios.
+Scenarios that require a product decision are flagged in Open Questions rather
+than written vaguely.
+
+**You review the design doc.** This is the first gate — nothing gets built until
+you're satisfied. Iterate if needed. Pay particular attention to the scenarios —
+vague scenarios reveal underspecified design.
+
+When you approve ("looks good", "ship it", "build it"), the design skill
+**automatically creates GitHub Issues** labeled `dev-cycle:build` and shows you what it created:
+
+```
+Created 2 GitHub Issue(s) for dark-mode:
+- #42 dark-mode-1: Theme tokens + storage  [dev-cycle:build]
+- #43 dark-mode-2: UI wiring + toggle component  [dev-cycle:build]
+
+Ready to build? (yes / build dark-mode-1 only / not yet)
+```
+
+This is the **second gate** — you confirm before any build agents spin up.
+
+> **Manual queue:** Run `/queue .dev_cycle/design/<slug>.md` if you need to
+> re-queue after editing a design, adjust work orders before building, or
+> queue multiple designs at once.
+
+### Phase 2: Build (`/build`)
+
+```
+/build <slug>         ← build next work order for slug (one background agent)
+/build                ← build all parallel-safe queued items in parallel
+/build <slug> i-j     ← series for work-order indices *i*…*j* (e.g. `4-7`): build → `/review` completes → next build
+/build <slug> --all   ← same for every queued slug-* issue
+```
+
+The build skill reads from:
+```bash
+gh issue list --label "dev-cycle:build" ...
+```
+
+The build agent (in isolated worktree):
+1. Reads work order from `gh issue view <N>`
+2. Explores existing code in affected areas
+3. Fetches linked decision issues from the Context Manifest's `Relevant decisions:` line
+4. Plans with implementation phases, maps every scenario to a task
+5. **Implements with TDD** — red/green/commit per task
+6. Runs iteration gate after each phase (`gates.sh iteration`)
+7. **All scenarios must pass** before creating PR (if present)
+8. Pushes branch and creates a PR whose body includes **manual QA steps** (from Idea +
+   Scenarios), a **rough LLM token estimate** table (build + review — order-of-magnitude
+   only), and `Closes #<N>`.
+
+9. **Main agent chains `/review`** for that issue (feature branch + PR URL passed in).
+   Skip this only if the user asked for build-only.
+
+For **`/build <slug> i-j`** or **`--all`**, the main agent runs a **series queue**:
+**background** build agent for **one** issue at a time → on completion, `/review` →
+context check → spawn the next (each build is a **new** subagent). If the **main**
+session runs low on context, stop with resume instructions.
+
+**35-minute rule:** If any implementation phase would take >35 min, the feature should be split.
+Agent performance degrades sharply past this threshold.
+
+### Phase 3: Review (`/review`)
+
+```
+/review <slug>-N
+/review #<issue-number>
+```
+
+Usually runs **automatically after each `/build` completion**. Use these commands for a
+re-review after `/fix`, or if you skipped the chain.
+
+The review skill resolves the issue number. Labels: `/build`’s handoff sets
+`dev-cycle:review` (and removes `dev-cycle:build`) before review runs; `/review` keeps
+that idempotent.
+
+The review agent (Sonnet) **checks out the feature branch** when `Feature branch:` is
+passed (required after `/build`):
+1. Reads work order from `gh issue view <N>`
+2. Checks for spec drift (highest priority)
+3. **Verifies all BDD scenarios pass** (hard gate if scenarios present)
+4. Runs hardened checks: N+1 queries, auth boundary violations, missing error UX, resource leaks
+5. Verifies TDD tests exist and are sufficient
+6. Fixes issues, commits, pushes — **updates the existing PR** from `/build`
+7. Runs `gates.sh pre-pr`
+
+### Phase 4: Validate (you)
+
+Check out the branch, run the app, test every flow from the spec.
+
+**If issues found:**
+1. Run `/fix` with the PR number — spawns a scoped fix agent (Sonnet)
+2. The fix agent reads only bug reports + affected files
+3. Run `/review` to verify fixes
+4. Back to validation
+
+**If clean:** Merge via `gh pr merge --squash` or GitHub UI.
+
+### Phase 5: Complete (`/complete`)
+
+```
+/complete <slug>-N
+/complete pr-N
+```
+
+Closes the GitHub Issue (`dev-cycle:done`), captures decisions and gotchas as GitHub Issues labeled `dev-cycle:decision`.
+
+## Verification Gates
+
+Executable gates in `.dev_cycle/gates.sh`:
+
+| Gate | When | What it checks |
+|------|------|---------------|
+| `iteration` | After each implementation phase | Codegen (if models changed), analyzer, tests |
+| `pre-pr` | Before creating PR | Full codegen, TODOs in changed files, comment density, analyzer, tests |
+| `final` | After merge (optional) | Clean build from scratch, analyzer, full test suite |
+
+Usage:
+```bash
+./.dev_cycle/gates.sh iteration
+./.dev_cycle/gates.sh pre-pr
+./.dev_cycle/gates.sh final
+```
+
+## Tracking Dev Cycle State
+
+Work order state lives in **GitHub Issues** — no files to commit for queue transitions.
+
+The only `.dev_cycle/` files that need committing:
+- `project.yaml`, `gates_config.sh`, `agents/` — after any config changes
+- `design/<slug>.md` — after design approval (committed by design/queue skill)
+
+Decisions are stored as GitHub Issues labeled `dev-cycle:decision` — no commit needed.
+
+| Action | Commit message pattern |
+|--------|----------------------|
+| Add design doc | `design: add <slug> design doc` |
+| Update workflow/skills | `dev_cycle: describe change` |
+
+**Always commit and push config changes before running `/build`.** Agents run in
+worktrees branched from main — uncommitted files are invisible to them.
+
+## Agent Stats Tracking
+
+Every PR includes an **Agent Stats** table:
+
+```markdown
+## Agent Stats
+| Phase  | Tokens  | Tool Calls | Duration | Est. Cost |
+|--------|---------|------------|----------|-----------|
+| Design | 45,000  | 22         | 2m 30s   | $0.68     |
+| Dev    | 77,671  | 63         | 4m 10s   | $1.17     |
+| Review | 64,897  | 56         | 3m 54s   | $0.97     |
+| **Total** | **187,568** | **141** | **10m 34s** | **$2.82** |
+```
+
+Cost estimated using blended rates:
+- **Opus 4.6:** ~$15/MTok (design, build)
+- **Sonnet 4.6:** ~$6/MTok (review, fix)
+
+## Model Tiering
+
+Model assignments live in `.dev_cycle/project.yaml` under **`models`**
+and are configured by `/init-dev-cycle`. Edit them there.
+
+Default tiering:
+
+| Agent | Default model | Why |
+|-------|--------------|-----|
+| design | claude-opus-4-6 | Architecture decisions need strongest reasoning |
+| build | claude-opus-4-6 | TDD + code generation benefits from best model |
+| review | claude-sonnet-4-6 | Reading + checking, not architecture design |
+| fix | claude-sonnet-4-6 | Targeted edits to existing code |
+| deploy | claude-sonnet-4-6 | Mechanical startup + log monitoring |
+
+Available models: `claude-opus-4-6`, `claude-sonnet-4-6`, `claude-haiku-4-5-20251001`
+
+## Context Efficiency
+
+Agents use **scoped context loading** to minimize token waste:
+
+1. **summary.txt** (~160 lines) is the fast-load entry point
+2. **Context Manifest** in the GitHub Issue lists exactly which docs/code to read
+3. **MANIFEST.md** provides fallback "load when" guidance
+4. **Fix agents read almost nothing** — just bug reports and affected files
+
+Typical savings: 30-40% fewer input tokens vs reading everything.
+
+## Quality Principles (from Agentic Pipeline Research)
+
+These research-backed thresholds inform the workflow design:
+
+- **35-minute degradation cliff** — agent quality drops sharply past 35 min of active work. Split features that exceed this.
+- **79% of multi-agent failures are specification issues** — good design docs prevent most downstream problems.
+- **TDD catches bugs earlier and cheaper** — red/green/commit pattern in `/build`.
+- **AI code has 1.7x more security issues** — hardened checks in `/review` compensate.
+- **Context rot starts immediately** — scoped loading isn't optional, it's essential.
+
+## Branch Strategy
+
+### Independent features
+Branch from `main`, merge in any order.
+
+### Dependent features (chains, same slug)
+
+The `Depends on:` field marks the predecessor work order (e.g. `A-2` depends on `A-1`).
+The build skill still requires the predecessor to reach `dev-cycle:review` or
+`dev-cycle:done` before the next build spawns (so its branch exists on `origin` or its
+commits are on `main`).
+
+**Stacked git branches:** For **A-1 → A-2 → A-3**, **A-2** is created from **`origin/dev-A-1`**
+(tip of A-1’s branch), **A-3** from **`origin/dev-A-2`**. Each PR still **targets `main`**.
+Merge **earlier PRs in the chain first** (or rebase later branches onto `main` after
+predecessors merge). If a predecessor is already **merged**, the next branch cuts from
+**`origin/main`** instead.
+
+## Tips
+
+- **Keep features small.** If it would take >35 min of agent work, split it.
+- **The idea is the input.** Be specific — vague ideas produce vague code.
+- **Review is not optional.** Always review the PR before merging.
+- **TDD is not optional.** Tests written alongside code catch bugs cheaper than tests after.
+- **Validate before building.** A bad plan caught early saves a full rewrite.
+- **Queue state is on GitHub.** Work order status and decisions both live in GitHub Issues — only config changes need committing.

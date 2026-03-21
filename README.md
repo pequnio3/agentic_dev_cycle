@@ -48,17 +48,19 @@ Or from inside your project root:
 bash ~/tools/agentic-dev-cycle/install.sh
 ```
 
+To **dogfood this repository**, run the same command from the tool repo root — it creates **`.dev_cycle/`** next to **`core/`** (install no longer refuses the tool directory).
+
 The install script:
-- Symlinks `.dev_cycle/skills` → the tool's `dev_cycle/skills/` (canonical skill bundle)
+- Symlinks `.dev_cycle/skills` → the tool's **`core/skills/`** (canonical skill bundle)
 - Adds `.claude/skills/dev_cycle` → `.dev_cycle/skills`, plus flat per-skill symlinks under `.claude/skills/` so `/design`, `/build`, etc. work in Claude Code
 - Mirrors the same layout under `.cursor/skills/` (Cursor Agent Skills), `.agents/skills/` (Codex + Gemini CLI repo skills), and `.gemini/skills/` (Gemini CLI workspace path)
 - Writes / refreshes the workflow block in `AGENTS.md` (Codex + Gemini) — delimited by HTML comments so reinstall can replace it
 - Overwrites `.cursor/rules/dev-cycle.mdc` — auto-loaded into every Cursor Composer session
-- **Overwrites** bundled templates in `.dev_cycle/` (`gates.sh`, `gates_config.sh`, `project.md`, `agents/*.md`, `workflow.md`) so a reinstall picks up tool updates
+- **Overwrites** bundled templates in `.dev_cycle/` (`gates.sh`, `gates_config.sh`, `project.yaml`, `agents/<name>/{base,custom}.md`, `workflow.md`) so a reinstall picks up tool updates
 - Checks for `gh` CLI authentication (required for GitHub Issues integration)
 - Adds `.dev_cycle/` and the skill hub directories to `.gitignore`
 
-**Updating the workflow in an existing project:** `git pull` in the tool repo, run `install.sh` again on your project (refreshes skills, templates, and routing), then run **`/init-dev-cycle`** (or `"init dev cycle"`) to regenerate **project-specific** `project.md`, `gates_config.sh`, and tailored `agents/*.md`.
+**Updating the workflow in an existing project:** `git pull` in the tool repo, run `install.sh` again on your project (refreshes skills, templates, and routing), then run **`/init-dev-cycle`** (or `"init dev cycle"`) to regenerate **project-specific** `project.yaml`, `gates_config.sh`, and `agents/<name>/custom.md` (personality).
 
 To preserve old files instead of overwriting, run: `AGENTIC_DEV_CYCLE_NO_OVERWRITE=1 bash …/install.sh`
 
@@ -71,9 +73,9 @@ Then configure for your project. Open Claude Code and run:
 Or with Codex / Gemini: ask your agent to `"init dev cycle"`.
 
 This interviews you about your tech stack and generates:
-- `.dev_cycle/project.md` — your project config, read by every agent
+- `.dev_cycle/project.yaml` — structured project config (stack, patterns, **`models:`**, gates summary), read by every agent
 - `.dev_cycle/gates_config.sh` — your build/test/lint commands
-- `.dev_cycle/agents/*.md` — agent personalities tailored to your stack
+- `.dev_cycle/agents/<name>/custom.md` — personality (merged with `base.md` from the tool)
 
 `.dev_cycle/` is gitignored by default — your workflow state is private.
 Teams who want shared workflow state: remove `.dev_cycle/` from `.gitignore` and commit it.
@@ -93,6 +95,10 @@ gh auth login
 ```
 
 ---
+
+## Dogfood on this repo
+
+Versioned skills and templates live under **`core/`** in this repository. Run **`install.sh`** from the repo root (or `bash install.sh /path/to/this/clone`) to create **`.dev_cycle/`** with symlinks and copied templates—the same layout as in any other project. Then use **`/design`**, **`/build`**, etc. on this repo. Edit files under **`core/`** when changing the canonical bundle; reinstall or symlink picks them up.
 
 ## Quick reference
 
@@ -114,7 +120,9 @@ gh auth login
 | `/deploy model-picker-1` | Sonnet | Checkout **`dev-model-picker-1`**, then run |
 | `/deploy dev-foo-2` | Sonnet | Checkout branch **`dev-foo-2`** literally |
 
-Models are defaults. Override per-agent in `.dev_cycle/project.md`.
+Models are defaults. Override per-agent under `models:` in `.dev_cycle/project.yaml`.
+
+**Optional — executable `/design` and `/init-dev-cycle` graphs:** [`core/langgraph_design/README.md`](core/langgraph_design/README.md) packages [LangGraph](https://github.com/langchain-ai/langgraph) state machines with the same checkpoints as the skills. **`install.sh` runs `python3 -m pip install -e core/langgraph_design`** so `dev-cycle-design-graph` and `dev-cycle-init-graph` are available (set `AGENTIC_DEV_CYCLE_SKIP_PIP=1` to skip). Use when you want deterministic guardrails and `interrupt`/`resume` instead of prompt-only orchestration.
 
 ---
 
@@ -268,7 +276,7 @@ from **`main`**.
 /deploy                 ← current checkout
 ```
 
-Checks out the target branch, starts dev servers (using commands from `project.md`),
+Checks out the target branch, starts dev servers (using context from `project.yaml` and `gates_config.sh`),
 and monitors logs. Startup errors are auto-fixed. While it's running you can say:
 
 - `"logs"` — show recent server output
@@ -285,8 +293,9 @@ git pull
 bash install.sh /path/to/your/project   # safe to re-run, skips existing config files
 ```
 
-`install.sh` never overwrites `project.md`, `gates_config.sh`, or your customized
-`agents/*.md` — those are yours. It only copies files that don't exist yet.
+With **`AGENTIC_DEV_CYCLE_NO_OVERWRITE=1`**, `install.sh` skips existing `project.yaml`,
+`gates_config.sh`, and **`agents/*/custom.md`** (your personality). By default, reinstall
+refreshes **`base.md`** and **`project.yaml`** templates from the tool unless skipped the same way.
 
 ---
 
@@ -333,13 +342,13 @@ Build agents run in isolated git worktrees on their own branches. They can't bre
 your working tree and you can keep using Claude Code while they run in the background.
 
 This requires that all files agents need are committed to main before building.
-Any time you edit `project.md` or prompts, commit and push before running `/build`.
+Any time you edit `project.yaml` or prompts, commit and push before running `/build`.
 
 ### The 35-minute rule
 
 Agent quality degrades sharply after ~35 minutes of active work. The workflow enforces
-small features through the wave structure — each wave should be completable in under
-35 minutes. If a wave would exceed this, the build agent splits it or reports back.
+small features through **implementation phases** — each phase should be completable in under
+35 minutes. If a phase would exceed this, the build agent splits it or reports back.
 
 ### Scoped context loading
 
@@ -363,14 +372,14 @@ self-contained and fully understandable on its own.
 
 ## Configuration
 
-All project-specific config lives in `.dev_cycle/project.md`. Edit it directly or
+All project-specific config lives in `.dev_cycle/project.yaml`. Edit it directly or
 re-run `/init-dev-cycle` to regenerate it. Key sections:
 
 | Section | What it controls |
 |---------|-----------------|
 | Tech Stack Details | How agents structure code and make technology choices |
 | Architecture Patterns | Rules agents must follow (e.g. repository pattern, state management) |
-| Wave Structure | How implementation is broken into phases for your stack |
+| Implementation phases | How work is split into phases for your stack (`implementation_phases` in `project.yaml`) |
 | Models | Which Claude model runs each agent type |
 | Gate Commands | Human-readable description of what `gates.sh` runs |
 
@@ -378,7 +387,7 @@ After editing, commit and push so build agents (in worktrees) pick up the change
 
 ### Changing model assignments
 
-Edit the Models table in `.dev_cycle/project.md`:
+Edit `models:` in `.dev_cycle/project.yaml`:
 
 ```markdown
 | Agent  | Model               |
@@ -395,7 +404,7 @@ Available: `claude-opus-4-6`, `claude-sonnet-4-6`, `claude-haiku-4-5-20251001`
 Edit `.dev_cycle/gates_config.sh`. The file has three functions:
 
 ```bash
-run_wave_gate()   # run after each implementation wave
+run_iteration_gate()   # run after each implementation phase (`gates.sh iteration`)
 run_pre_pr_gate() # run before creating PR
 run_final_gate()  # run after merge (clean build check)
 ```
@@ -408,9 +417,10 @@ After install and init, your project will have:
 
 ```
 ~/tools/agentic-dev-cycle/   ← the tool (clone once, use across projects)
-  dev_cycle/
+  core/
     skills/                  ← skill definitions (SKILL.md per command)
-    ...                      ← templates and generic docs (source)
+    ...                      ← templates and generic docs (versioned bundle)
+  .dev_cycle/                ← after install.sh: symlinks + copies (gitignored by default)
 
 AGENTS.md                    ← workflow routing for Codex + Gemini (committed)
 
@@ -426,17 +436,15 @@ AGENTS.md                    ← workflow routing for Codex + Gemini (committed)
 .gemini/skills/              ← same pattern for Gemini CLI (gitignored)
 
 .dev_cycle/                  ← your project's workflow state (gitignored by default)
-  skills -> .../dev_cycle/skills   ← symlink to the tool bundle (created by install.sh)
-  project.md                 ← project config (generated by /init-dev-cycle)
+  skills -> .../core/skills   ← symlink to the tool bundle (created by install.sh)
+  project.yaml               ← project config + models (generated by /init-dev-cycle)
   gates.sh                   ← generic gate runner
   gates_config.sh            ← your build/test commands
   workflow.md                ← this workflow's documentation
-  agents/                    ← agent personalities (generated by /init-dev-cycle)
-    design_agent.md
-    build_agent.md
-    review_agent.md
-    fix_agent.md
-    deploy_agent.md
+  agents/                    ← base.md (from tool) + custom.md (personality from /init-dev-cycle)
+    design/base.md custom.md
+    build/base.md custom.md
+    review/ fix/ deploy/ init/ …
   design/                    ← draft scratch space for design agent output
 
 GitHub Issues (work order queue):
@@ -470,7 +478,7 @@ not just login") are automatically surfaced for relevant features.
 
 **Queue state is on GitHub.** Work order status and decisions live in GitHub Issues — no
 files to commit when transitioning between build/review/done. Only config changes
-(`project.md`, `gates_config.sh`, `agents/*.md`) need committing.
+(`project.yaml`, `gates_config.sh`, `agents/`) need committing.
 
 **Never skip `/complete`.** Closing the issue and extracting decisions takes 30 seconds
 and saves hours of future debugging. The decisions log is only as good as the discipline

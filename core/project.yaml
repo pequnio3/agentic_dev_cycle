@@ -1,0 +1,56 @@
+# Dev-cycle project configuration (human-readable YAML).
+# install.sh copies this to .dev_cycle/project.yaml
+# /init-dev-cycle replaces placeholders with real project values.
+
+schema_version: 1
+
+project:
+  name: "" # e.g. MyApp
+  description: "" # e.g. A fitness tracking app for personal trainers and their clients
+  stack: "" # e.g. Flutter + Supabase, Next.js + Prisma + Postgres
+  repo: "" # optional path hint, e.g. ~/code/myapp
+
+# Long-form narrative — be specific so agents choose the right tools and patterns.
+tech_stack_details: |
+  <!-- Describe frameworks, libraries, and tools.
+       Example (Flutter):
+         - Flutter 3.x with Dart, Riverpod, Freezed, Supabase, feature-first layout -->
+
+# Rules agents must follow (bullets or prose).
+architecture_patterns: |
+  <!-- e.g. All DB calls through repositories; no Supabase in widgets -->
+
+# How work is split into implementation phases for this stack (planning — not the same as gates.sh iteration).
+implementation_phases: |
+  <!-- Phase 1: data layer, Phase 2: logic, Phase 3: UI — customize for your stack -->
+
+# Human-readable descriptions; actual shell commands live in gates_config.sh.
+gate_commands:
+  iteration: "" # e.g. flutter analyze + flutter test
+  pre_pr: "" # e.g. same + full codegen
+  final: "" # e.g. clean build + gates
+
+# Model id per agent (tools read this first). Optional `reason` for humans.
+models:
+  design:
+    model: claude-opus-4-6
+    reason: Architecture decisions need strongest reasoning
+  build:
+    model: claude-opus-4-6
+    reason: TDD + code generation benefits from best model
+  review:
+    model: claude-sonnet-4-6
+    reason: Reading + checking, not architecture design
+  fix:
+    model: claude-sonnet-4-6
+    reason: Targeted edits to existing code
+  deploy:
+    model: claude-sonnet-4-6
+    reason: Mechanical startup + log monitoring
+
+branch_naming:
+  prefix: dev-
+  pattern: dev-<slug>-<N>
+
+code_style_notes: |
+  <!-- Naming, formatting, file organization, things to avoid -->

@@ -12,7 +12,9 @@
 #   bash ~/tools/agentic-dev-cycle/install.sh
 #
 # What it does:
-#   1a. Symlinks .dev_cycle/skills → dev_cycle/skills in this repo (canonical copy)
+#   0.  pip install -e core/langgraph_design (dev-cycle-design-graph, dev-cycle-init-graph CLIs)
+#       Skip with AGENTIC_DEV_CYCLE_SKIP_PIP=1
+#   1a. Symlinks project .dev_cycle/skills → core/skills in this repo (canonical bundle)
 #        and wires per-tool hubs: .claude/skills/dev_cycle, .cursor/skills/dev_cycle,
 #        .agents/skills/dev_cycle, .gemini/skills/dev_cycle — each also gets flat
 #        per-skill symlinks so Claude/Cursor discover /design, /build, etc.
@@ -38,12 +40,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="${1:-$(pwd)}"
 PROJECT_ROOT="$(cd "$PROJECT_ROOT" && pwd)"
 
-# Safety check: ensure we're not installing into the tool repo itself
-if [[ "$PROJECT_ROOT" == "$SCRIPT_DIR" ]]; then
-  echo "Error: target directory is the tool repo itself."
-  echo "Usage: bash install.sh /path/to/your/project"
-  exit 1
-fi
+# Installing into the tool repo itself is allowed: creates .dev_cycle/ next to core/
+# so you can dogfood /design and /build on this repository.
 
 # Safety check: ensure target exists
 if [[ ! -d "$PROJECT_ROOT" ]]; then
@@ -66,13 +64,13 @@ if [[ "${AGENTIC_DEV_CYCLE_NO_OVERWRITE:-}" == "1" ]]; then
   OVERWRITE_INSTALL=false
 fi
 
-# Canonical skills live under .dev_cycle/skills (points at this repo's dev_cycle/skills).
+# Canonical skills live under core/skills in this repo; installed projects use .dev_cycle/skills → core/skills.
 # Each tool hub gets dev_cycle → .dev_cycle/skills plus one symlink per skill at the
 # hub root (Claude/Cursor scan immediate children; dev_cycle/ has no SKILL.md at root).
 link_skill_hub() {
   local hub_rel="$1"
   local hub_abs="$PROJECT_ROOT/$hub_rel"
-  local skill_root="$SCRIPT_DIR/dev_cycle/skills"
+  local skill_root="$SCRIPT_DIR/core/skills"
 
   mkdir -p "$hub_abs"
 
@@ -120,7 +118,7 @@ echo ""
 mkdir -p "$PROJECT_ROOT/.dev_cycle"
 
 DEV_CYCLE_SKILLS="$PROJECT_ROOT/.dev_cycle/skills"
-BUNDLED_SKILLS="$SCRIPT_DIR/dev_cycle/skills"
+BUNDLED_SKILLS="$SCRIPT_DIR/core/skills"
 
 if [[ -d "$DEV_CYCLE_SKILLS" ]] && [[ ! -L "$DEV_CYCLE_SKILLS" ]]; then
   echo "Warning: .dev_cycle/skills/ exists as a real directory, not a symlink."
@@ -185,15 +183,15 @@ any of the following tasks, read the corresponding instructions file first.
 
 | Task | Instructions |
 |------|-------------|
-| Design a feature / expand an idea | \`.dev_cycle/agents/design_agent.md\` |
-| Build a GitHub Issue | \`.dev_cycle/agents/build_agent.md\` |
-| Review a feature branch | \`.dev_cycle/agents/review_agent.md\` |
-| Fix a bug or PR | \`.dev_cycle/agents/fix_agent.md\` |
-| Deploy / start dev servers | \`.dev_cycle/agents/deploy_agent.md\` |
+| Design a feature / expand an idea | \`.dev_cycle/agents/design/\` (\`base.md\` + \`custom.md\`) |
+| Build a GitHub Issue | \`.dev_cycle/agents/build/\` |
+| Review a feature branch | \`.dev_cycle/agents/review/\` |
+| Fix a bug or PR | \`.dev_cycle/agents/fix/\` |
+| Deploy / start dev servers | \`.dev_cycle/agents/deploy/\` |
 | Complete a merged work order | \`.dev_cycle/skills/complete/SKILL.md\` |
 
 **Project config** (tech stack, architecture patterns, gate commands):
-\`.dev_cycle/project.md\`
+\`.dev_cycle/project.yaml\`
 
 **Work orders:** GitHub Issues labeled \`dev-cycle:build\`
 **Past decisions:** GitHub Issues labeled \`dev-cycle:decision\` — always scan
@@ -234,15 +232,15 @@ before doing anything else.
 
 | Task | Instructions |
 |------|-------------|
-| Design a feature / expand an idea | `.dev_cycle/agents/design_agent.md` |
-| Build a GitHub Issue | `.dev_cycle/agents/build_agent.md` |
-| Review a feature branch | `.dev_cycle/agents/review_agent.md` |
-| Fix a bug or PR | `.dev_cycle/agents/fix_agent.md` |
-| Deploy / start dev servers | `.dev_cycle/agents/deploy_agent.md` |
+| Design a feature / expand an idea | `.dev_cycle/agents/design/` |
+| Build a GitHub Issue | `.dev_cycle/agents/build/` |
+| Review a feature branch | `.dev_cycle/agents/review/` |
+| Fix a bug or PR | `.dev_cycle/agents/fix/` |
+| Deploy / start dev servers | `.dev_cycle/agents/deploy/` |
 | Complete a merged work order | `.dev_cycle/skills/complete/SKILL.md` |
 
 **Project config** (tech stack, architecture patterns, gate commands):
-`.dev_cycle/project.md`
+`.dev_cycle/project.yaml`
 
 **Work orders:** GitHub Issues labeled `dev-cycle:build`
 **Past decisions:** GitHub Issues labeled `dev-cycle:decision` — scan
@@ -301,21 +299,25 @@ copy_template() {
 
 if $OVERWRITE_INSTALL; then
   info "Refreshing .dev_cycle templates from tool (overwrites existing copies)."
-  info "Re-run /init-dev-cycle afterward to regenerate project-specific project.md, gates_config.sh, and agents."
+  info "Re-run /init-dev-cycle afterward to regenerate project-specific project.yaml, gates_config.sh, and agents."
 fi
 
 info "Copying config templates to .dev_cycle/..."
-copy_template "$SCRIPT_DIR/dev_cycle/gates.sh"        "$PROJECT_ROOT/.dev_cycle/gates.sh"
-copy_template "$SCRIPT_DIR/dev_cycle/gates_config.sh" "$PROJECT_ROOT/.dev_cycle/gates_config.sh"
-copy_template "$SCRIPT_DIR/dev_cycle/project.md"      "$PROJECT_ROOT/.dev_cycle/project.md"
+copy_template "$SCRIPT_DIR/core/gates.sh"        "$PROJECT_ROOT/.dev_cycle/gates.sh"
+copy_template "$SCRIPT_DIR/core/gates_config.sh" "$PROJECT_ROOT/.dev_cycle/gates_config.sh"
+copy_template "$SCRIPT_DIR/core/project.yaml"    "$PROJECT_ROOT/.dev_cycle/project.yaml"
 
 chmod +x "$PROJECT_ROOT/.dev_cycle/gates.sh"
 
-# Copy generic agent instruction files (only if agents/ is empty)
-for prompt in design_agent build_agent review_agent fix_agent deploy_agent; do
+# Agent prompts: <agent>/{base,custom}.md — base from tool; custom is usually edited by /init-dev-cycle
+for agent in init design build review fix deploy; do
+  mkdir -p "$PROJECT_ROOT/.dev_cycle/agents/$agent"
   copy_template \
-    "$SCRIPT_DIR/dev_cycle/agents/${prompt}.md" \
-    "$PROJECT_ROOT/.dev_cycle/agents/${prompt}.md"
+    "$SCRIPT_DIR/core/agents/$agent/base.md" \
+    "$PROJECT_ROOT/.dev_cycle/agents/$agent/base.md"
+  copy_template \
+    "$SCRIPT_DIR/core/agents/$agent/custom.md" \
+    "$PROJECT_ROOT/.dev_cycle/agents/$agent/custom.md"
 done
 
 # Decisions are stored as GitHub Issues labeled "dev-cycle:decision"
@@ -326,10 +328,30 @@ for doc in workflow.md; do
   if ! $OVERWRITE_INSTALL && [[ -f "$PROJECT_ROOT/.dev_cycle/$doc" ]]; then
     skip "$doc"
   else
-    cp "$SCRIPT_DIR/dev_cycle/$doc" "$PROJECT_ROOT/.dev_cycle/$doc"
+    cp "$SCRIPT_DIR/core/$doc" "$PROJECT_ROOT/.dev_cycle/$doc"
     ok "$doc"
   fi
 done
+
+# ---------------------------------------------------------------------------
+# Step 4b: LangGraph package (CLI entry points for /design and /init-dev-cycle graphs)
+# ---------------------------------------------------------------------------
+
+LANGGRAPH_PKG="$SCRIPT_DIR/core/langgraph_design"
+if [[ "${AGENTIC_DEV_CYCLE_SKIP_PIP:-}" == "1" ]]; then
+  skip "pip install langgraph_design (AGENTIC_DEV_CYCLE_SKIP_PIP=1)"
+elif [[ -d "$LANGGRAPH_PKG" && -f "$LANGGRAPH_PKG/pyproject.toml" ]]; then
+  echo ""
+  info "Installing LangGraph package (editable install for CLIs)..."
+  if python3 -m pip install -e "$LANGGRAPH_PKG"; then
+    ok "pip install -e core/langgraph_design (dev-cycle-design-graph, dev-cycle-init-graph)"
+  else
+    echo -e "${YELLOW}Warning:${NC} pip install failed. Install manually when needed:"
+    echo "  python3 -m pip install -e \"$LANGGRAPH_PKG\""
+  fi
+else
+  echo -e "${YELLOW}Warning:${NC} $LANGGRAPH_PKG missing — skipping pip install."
+fi
 
 # ---------------------------------------------------------------------------
 # Step 5: Update .gitignore
@@ -387,16 +409,20 @@ echo ""
 if $OVERWRITE_INSTALL; then
   echo "  Templates and routing were refreshed from this tool. If this was an upgrade,"
   echo "  run /init-dev-cycle (or \"init dev cycle\") again to regenerate project-specific"
-  echo "  project.md, gates_config.sh, and agents/*.md."
+  echo "  project.yaml, gates_config.sh, and agents/<name>/{base,custom}.md."
   echo ""
 fi
 echo "Next steps:"
+echo "  0. LangGraph CLIs should be on PATH (pip install ran above). Verify:"
+echo "       dev-cycle-design-graph --help"
+echo "       dev-cycle-init-graph --help"
+echo ""
 echo "  1. Configure for your project:"
 echo "     Claude Code:  open project, run /init-dev-cycle"
 echo "     Cursor:       open Composer, type 'init dev cycle'"
 echo "     Codex CLI:    codex 'init dev cycle'"
 echo "     Gemini CLI:   gemini 'init dev cycle'"
-echo "     This generates .dev_cycle/project.md, gates_config.sh, and agent instructions."
+echo "     This generates .dev_cycle/project.yaml, gates_config.sh, and agent instructions."
 echo ""
 echo "  2. Ensure gh CLI is authenticated: gh auth login"
 echo "     (required for GitHub Issues integration)"
