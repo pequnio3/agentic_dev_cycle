@@ -16,7 +16,7 @@ When this skill is invoked:
    - If an issue number is given (`#N` or `N`), use it directly
    - If a slug is given (`slug-N`), resolve the issue number:
      ```bash
-     gh issue list --state all --search "feat(<slug>-N)" --json number,title \
+     gh issue list --state all --search "in:title <slug>-N:" --json number,title \
        | jq '.[0].number'
      ```
 

@@ -58,7 +58,7 @@ When this skill is invoked:
 
    **Determine work order numbers** — query existing issues for this slug:
    ```bash
-   gh issue list --state all --search "feat(<slug>-" --json title --jq '.[].title' \
+   gh issue list --state all --search "in:title <slug>-" --json title --jq '.[].title' \
      | grep -oE '<slug>-[0-9]+' | grep -oE '[0-9]+' | sort -n | tail -1
    ```
    New work orders start at `(max + 1)`, or `1` if none exist.
@@ -74,7 +74,7 @@ When this skill is invoked:
    **Create the issue** using `dev_cycle/issue_template.md` as the body structure:
    ```bash
    gh issue create \
-     --title "feat(<slug>-N): <short description of this phase>" \
+     --title "<slug>-N: <short description of this phase>" \
      --body "$(cat <<'EOF'
    Slug: <slug>-N
    Branch: dev-<slug>-N
@@ -142,8 +142,8 @@ When this skill is invoked:
 
    ```
    Created N GitHub Issue(s) for <slug>:
-   - #<N1> feat(<slug>-1) — <phase 1 description>  [dev-cycle:build]
-   - #<N2> feat(<slug>-2) — <phase 2 description>  [dev-cycle:build]
+   - #<N1> <slug>-1: <phase 1 description>  [dev-cycle:build]
+   - #<N2> <slug>-2: <phase 2 description>  [dev-cycle:build]
 
    Ready to build? I'll spawn build agents in isolated worktrees.
    (yes / build <slug>-1 only / not yet)

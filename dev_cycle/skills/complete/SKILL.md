@@ -14,7 +14,7 @@ and capture key decisions as GitHub Issues labeled `dev-cycle:decision`.
 
 **If argument is `<slug>-N`** (e.g. `gemini-provider-1`):
 ```bash
-gh issue list --state all --search "feat(<slug>-N)" --json number,title \
+gh issue list --state all --search "in:title <slug>-N:" --json number,title \
   | jq '.[0].number'
 ```
 
@@ -23,7 +23,7 @@ gh issue list --state all --search "feat(<slug>-N)" --json number,title \
 gh pr view 6 --json closingIssuesReferences \
   --jq '.closingIssuesReferences[].number'
 ```
-If the PR body doesn't auto-link, check the PR title for a `feat(<slug>-N)` pattern
+If the PR body doesn't auto-link, check the PR title for a `<slug>-N:` pattern
 and search for the matching issue.
 
 ## Step 2: Verify PR is Merged (HARD GATE)

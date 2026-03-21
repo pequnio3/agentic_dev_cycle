@@ -22,11 +22,11 @@ description: >
 | Input | Mode |
 |-------|------|
 | `/build` *(no args)* | **Parallel** — one **background** agent per eligible issue |
-| `/build <slug>` | **Next** — lowest eligible `feat(<slug>-*)` issue, one **background** agent |
+| `/build <slug>` | **Next** — lowest eligible `<slug>-*` work-order issue, one **background** agent |
 | `/build <slug> i-j` | **Orchestrated series** — work orders `<slug>-i` through `<slug>-j` inclusive *(i, j = numeric work-order indices; see below)* |
 | `/build <slug> --all` | **Orchestrated series** — every open `dev-cycle:build` issue for `<slug>`, ordered by work-order index |
 
-**Slug vs range:** The last token must be **`i-j`** — two non-negative integers with a hyphen (e.g. `4-7`, `10-12`; **any** valid range, not only 1–3). `i` and `j` are the work-order indices `k` from titles `feat(<slug>-k): …`. Require `i ≤ j`. Everything before that token is `<slug>` (may contain hyphens, e.g. `auth-core 2-5` → slug `auth-core`, range 2–5).
+**Slug vs range:** The last token must be **`i-j`** — two non-negative integers with a hyphen (e.g. `4-7`, `10-12`; **any** valid range, not only 1–3). `i` and `j` are the work-order indices `k` from issue titles `<slug>-k: …`. Require `i ≤ j`. Everything before that token is `<slug>` (may contain hyphens, e.g. `auth-core 2-5` → slug `auth-core`, range 2–5).
 
 **Legacy:** Do **not** pass multiple issue numbers to a **single** build agent. Series work is always **one build subagent per issue**, then **chained `/review` to completion**, then **you** spawn the **next** background build.
 
@@ -35,11 +35,11 @@ description: >
 ### Resolve issues for a slug
 
 ```bash
-gh issue list --label "dev-cycle:build" --search "feat(<slug>-" \
+gh issue list --label "dev-cycle:build" --search "in:title <slug>-" \
   --json number,title,body --limit 200
 ```
 
-From each title `feat(<slug>-<k>): …`, parse **work-order index** `<k>` (integer at end of `feat(...)` before `):`).
+From each title `<slug>-<k>: …`, parse **work-order index** `<k>`: take the substring before the first `:`, then the last `-<digits>` suffix is `<k>` (the rest is `<slug>`; slugs may contain hyphens).
 
 - **Range mode:** keep issues where `i ≤ k ≤ j`.
 - **`--all` mode:** keep all matches for `<slug>`.
@@ -57,7 +57,7 @@ From each title `feat(<slug>-<k>): …`, parse **work-order index** `<k>` (integ
 2. For each issue, parse the body for `Depends on:` and `Parallel safe:`.
 3. Dependency check — if `Depends on: <dep-slug>-N`, that dependency must be `dev-cycle:review` or `dev-cycle:done`:
    ```bash
-   gh issue list --state all --search "feat(<dep-slug>-N)" --json number,labels \
+   gh issue list --state all --search "in:title <dep-slug>-N:" --json number,labels \
      --jq '.[] | select(.labels[].name | test("dev-cycle:(review|done)"))'
    ```
 4. Keep only issues with `Parallel safe: yes` (or sole item for their slug) and met dependencies.

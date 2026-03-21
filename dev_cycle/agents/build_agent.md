@@ -83,7 +83,7 @@ Read **`Branch:`** and **`Depends on:`** from the work order header.
 ### Same-slug chain (stacked branches)
 
 When **`Depends on:`** names the **immediate predecessor** work order for the **same**
-feature slug (e.g. current `feat(A-3)`, depends `A-2`, which depends `A-1`):
+feature slug (e.g. current work order `A-3`, depends `A-2`, which depends `A-1`):
 
 - **Git lineage:** this branch must grow from the **predecessor’s branch tip**, not from
   an empty `main` checkout — so **A-2** branches off **A-1’s** branch, **A-3** off **A-2’s**.
@@ -168,7 +168,7 @@ git push -u origin <branch-name>
 ```
 
 ```bash
-gh pr create --base main --title "feat(<slug>-<N>): short description" --body "$(cat <<'EOF'
+gh pr create --base main --title "<slug>-<N>: short description" --body "$(cat <<'EOF'
 ## Summary
 <1-3 bullet points>
 

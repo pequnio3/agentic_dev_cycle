@@ -34,7 +34,7 @@ The **slug** is the filename without extension: `.dev_cycle/design/gemini-provid
 For each design doc, query existing issues for this slug:
 
 ```bash
-gh issue list --state all --search "feat(<slug>-" --json title --jq '.[].title' \
+gh issue list --state all --search "in:title <slug>-" --json title --jq '.[].title' \
   | grep -oE '<slug>-[0-9]+' | grep -oE '[0-9]+' | sort -n | tail -1
 ```
 
@@ -56,7 +56,7 @@ single-phase), create a GitHub Issue:
 
 ```bash
 gh issue create \
-  --title "feat(<slug>-N): <short description of this phase>" \
+  --title "<slug>-N: <short description of this phase>" \
   --body "$(cat <<'EOF'
 Slug: <slug>-N
 Branch: dev-<slug>-N

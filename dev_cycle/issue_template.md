@@ -1,4 +1,4 @@
-# <Title>
+<!-- GitHub issue title: `<slug>-N: <short description>` (same pattern for PR titles) -->
 
 Slug: <slug>-N
 Branch: dev-<slug>-N

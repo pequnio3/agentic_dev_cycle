@@ -161,8 +161,8 @@ When you approve ("looks good", "ship it", "build it"), the design skill
 
 ```
 Created 2 GitHub Issue(s) for dark-mode:
-- #42 feat(dark-mode-1) — Theme tokens + storage  [dev-cycle:build]
-- #43 feat(dark-mode-2) — UI wiring + toggle component  [dev-cycle:build]
+- #42 dark-mode-1: Theme tokens + storage  [dev-cycle:build]
+- #43 dark-mode-2: UI wiring + toggle component  [dev-cycle:build]
 
 Ready to build? (yes / build dark-mode-1 only / not yet)
 ```

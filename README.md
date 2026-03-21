@@ -139,8 +139,8 @@ The design skill automatically creates GitHub Issues and asks before starting:
 
 ```
 Created 2 GitHub Issue(s) for dark-mode:
-- #42 feat(dark-mode-1) — Theme tokens + storage layer  [dev-cycle:build]
-- #43 feat(dark-mode-2) — UI components + toggle  [dev-cycle:build]
+- #42 dark-mode-1: Theme tokens + storage layer  [dev-cycle:build]
+- #43 dark-mode-2: UI components + toggle  [dev-cycle:build]
 
 Ready to build? (yes / build dark-mode-1 only / not yet)
 ```
@@ -303,7 +303,7 @@ Work orders are GitHub Issues, not files. Labels track state:
 | `dev-cycle:done` | Merged and complete |
 | `dev-cycle:decision` | Architectural decision or gotcha for future agents |
 
-Issue titles follow the pattern `feat(<slug>-N): <short description>`. The issue body
+Issue titles follow the pattern `<slug>-N: <short description>` (labels already mark the work-order type). The issue body
 contains the full work order: Idea, Context Manifest, Scenarios, Plan, and Implementation Notes.
 
 This means your queue is always visible on GitHub, shareable with your team, and you can
