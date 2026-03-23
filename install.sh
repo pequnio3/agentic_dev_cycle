@@ -12,21 +12,15 @@
 #   bash ~/tools/agentic-dev-cycle/install.sh
 #
 # What it does:
-#   1a. Symlinks .dev_cycle/skills → dev_cycle/skills in this repo (canonical copy)
-#        and wires per-tool hubs: .claude/skills/dev_cycle, .cursor/skills/dev_cycle,
-#        .agents/skills/dev_cycle, .gemini/skills/dev_cycle — each also gets flat
-#        per-skill symlinks so Claude/Cursor discover /design, /build, etc.
-#   1b. Appends workflow routing to AGENTS.md  (Codex CLI + Gemini CLI)
-#   2.  Bootstraps .dev_cycle/ — copies templates and reference docs (overwrites on re-run)
-#   3.  Adds .dev_cycle/ and skill hub paths to .gitignore
-#   4.  Refreshes AGENTS.md workflow block + .cursor/rules/dev-cycle.mdc from this tool
+#   1. Copies core/ into .dev_cycle/core/ in the target project
+#   2. Detects existing AI tool folders (.claude, .cursor, .agents, .gemini)
+#      and wires skill hubs so each tool discovers the dev-cycle skills
+#   3. Appends workflow routing to AGENTS.md
+#   4. Adds .cursor/rules/dev-cycle.mdc (only if .cursor/ already exists)
+#   5. Updates .gitignore
 #
-# Re-run after `git pull` in the tool repo to pick up workflow changes, then run
-# /init-dev-cycle (or "init dev cycle") to regenerate project-specific files.
-# Set AGENTIC_DEV_CYCLE_NO_OVERWRITE=1 to restore old skip-if-exists behavior for files only.
-#
-# After install, run /init-dev-cycle (Claude Code), or ask your AI agent
-# to "init dev cycle" (Codex / Gemini) to configure for your project.
+# Re-run after `git pull` in the tool repo to pick up changes.
+# Set AGENTIC_DEV_CYCLE_NO_OVERWRITE=1 to skip overwriting existing files.
 #
 set -euo pipefail
 
@@ -38,14 +32,12 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="${1:-$(pwd)}"
 PROJECT_ROOT="$(cd "$PROJECT_ROOT" && pwd)"
 
-# Safety check: ensure we're not installing into the tool repo itself
 if [[ "$PROJECT_ROOT" == "$SCRIPT_DIR" ]]; then
   echo "Error: target directory is the tool repo itself."
   echo "Usage: bash install.sh /path/to/your/project"
   exit 1
 fi
 
-# Safety check: ensure target exists
 if [[ ! -d "$PROJECT_ROOT" ]]; then
   echo "Error: target directory does not exist: $PROJECT_ROOT"
   exit 1
@@ -60,49 +52,65 @@ ok()   { echo -e "${GREEN}✓${NC} $1"; }
 info() { echo -e "${BLUE}→${NC} $1"; }
 skip() { echo -e "${YELLOW}↷${NC} $1 (already exists — skipped)"; }
 
-# Default: overwrite templates and routing files so `git pull` + reinstall refreshes the core.
 OVERWRITE_INSTALL=true
 if [[ "${AGENTIC_DEV_CYCLE_NO_OVERWRITE:-}" == "1" ]]; then
   OVERWRITE_INSTALL=false
 fi
 
-# Canonical skills live under .dev_cycle/skills (points at this repo's dev_cycle/skills).
-# Each tool hub gets dev_cycle → .dev_cycle/skills plus one symlink per skill at the
-# hub root (Claude/Cursor scan immediate children; dev_cycle/ has no SKILL.md at root).
+# ---------------------------------------------------------------------------
+# link_skill_hub — wire a per-tool skill hub to .dev_cycle/core/skills
+# ---------------------------------------------------------------------------
+#
+# Creates:
+#   $hub/dev_cycle    → ../../.dev_cycle/core/skills        (bundle)
+#   $hub/$skill_name  → ../../.dev_cycle/core/skills/$name  (flat per-skill)
+#
+# AI tools scan immediate children of their skills dir, so both the bundle
+# and the flat per-skill symlinks are needed for discovery.
 link_skill_hub() {
   local hub_rel="$1"
   local hub_abs="$PROJECT_ROOT/$hub_rel"
-  local skill_root="$SCRIPT_DIR/dev_cycle/skills"
+  local skill_source="$PROJECT_ROOT/.dev_cycle/core/skills"
 
   mkdir -p "$hub_abs"
 
+  # Remove stale symlinks from old installs (pointed at .dev_cycle/skills without /core/)
+  for existing_link in "$hub_abs"/*; do
+    [[ -L "$existing_link" ]] || continue
+    local target
+    target="$(readlink "$existing_link")"
+    if [[ "$target" == *".dev_cycle/skills"* ]] && [[ "$target" != *".dev_cycle/core/skills"* ]]; then
+      rm "$existing_link"
+      ok "Removed stale link: $hub_rel/$(basename "$existing_link")"
+    fi
+  done
+
+  # Bundle link: dev_cycle → all skills
   local bundle="$hub_abs/dev_cycle"
   if [[ -e "$bundle" ]] && [[ ! -L "$bundle" ]]; then
     echo "Warning: $hub_rel/dev_cycle exists and is not a symlink — not overwriting."
-  elif $OVERWRITE_INSTALL; then
-    ln -sfn "../../.dev_cycle/skills" "$bundle"
-    ok "$hub_rel/dev_cycle → .dev_cycle/skills"
-  elif [[ ! -e "$bundle" ]]; then
-    ln -sfn "../../.dev_cycle/skills" "$bundle"
-    ok "$hub_rel/dev_cycle → .dev_cycle/skills"
+  elif $OVERWRITE_INSTALL || [[ ! -e "$bundle" ]]; then
+    ln -sfn "../../.dev_cycle/core/skills" "$bundle"
+    ok "$hub_rel/dev_cycle → .dev_cycle/core/skills"
   else
     skip "$hub_rel/dev_cycle"
   fi
 
+  # Per-skill flat links (AI tools discover immediate children)
   local potential name link
-  for potential in "$skill_root"/*/; do
+  for potential in "$skill_source"/*/; do
     [[ -d "$potential" ]] || continue
     [[ -f "$potential/SKILL.md" ]] || continue
     name="$(basename "$potential")"
     link="$hub_abs/$name"
     if [[ -e "$link" ]] && [[ ! -L "$link" ]]; then
       echo "Warning: $hub_rel/$name exists and is not a symlink — not overwriting."
-    elif $OVERWRITE_INSTALL; then
-      ln -sfn "../../.dev_cycle/skills/$name" "$link"
-      ok "$hub_rel/$name → .dev_cycle/skills/$name"
+    elif $OVERWRITE_INSTALL || [[ ! -e "$link" ]]; then
+      ln -sfn "../../.dev_cycle/core/skills/$name" "$link"
+      ok "$hub_rel/$name → .dev_cycle/core/skills/$name"
     elif [[ ! -e "$link" ]]; then
-      ln -sfn "../../.dev_cycle/skills/$name" "$link"
-      ok "$hub_rel/$name → .dev_cycle/skills/$name"
+      ln -sfn "../../.dev_cycle/core/skills/$name" "$link"
+      ok "$hub_rel/$name → .dev_cycle/core/skills/$name"
     else
       skip "$hub_rel/$name"
     fi
@@ -114,55 +122,91 @@ echo "Agentic Dev Cycle — installing into $(basename "$PROJECT_ROOT")"
 echo ""
 
 # ---------------------------------------------------------------------------
-# Step 1a: .dev_cycle/skills + per-tool skill hubs
+# Step 1: Copy core/ into .dev_cycle/core/
 # ---------------------------------------------------------------------------
+
+CORE_SRC="$SCRIPT_DIR/core"
+CORE_DST="$PROJECT_ROOT/.dev_cycle/core"
+
+if [[ ! -d "$CORE_SRC" ]]; then
+  echo "Error: core/ directory not found in tool repo: $CORE_SRC"
+  exit 1
+fi
 
 mkdir -p "$PROJECT_ROOT/.dev_cycle"
 
-DEV_CYCLE_SKILLS="$PROJECT_ROOT/.dev_cycle/skills"
-BUNDLED_SKILLS="$SCRIPT_DIR/dev_cycle/skills"
+# Remove legacy skills symlink if present (old installs pointed here)
+if [[ -L "$PROJECT_ROOT/.dev_cycle/skills" ]]; then
+  rm "$PROJECT_ROOT/.dev_cycle/skills"
+  ok "Removed legacy .dev_cycle/skills symlink"
+fi
 
-if [[ -d "$DEV_CYCLE_SKILLS" ]] && [[ ! -L "$DEV_CYCLE_SKILLS" ]]; then
-  echo "Warning: .dev_cycle/skills/ exists as a real directory, not a symlink."
-  echo "Back it up and re-run install, or remove it if you want the bundled skills."
-elif $OVERWRITE_INSTALL && [[ -L "$DEV_CYCLE_SKILLS" ]]; then
-  ln -sfn "$BUNDLED_SKILLS" "$DEV_CYCLE_SKILLS"
-  ok ".dev_cycle/skills → $BUNDLED_SKILLS (refreshed)"
-elif [[ ! -e "$DEV_CYCLE_SKILLS" ]]; then
-  ln -sfn "$BUNDLED_SKILLS" "$DEV_CYCLE_SKILLS"
-  ok ".dev_cycle/skills → $BUNDLED_SKILLS"
+if $OVERWRITE_INSTALL; then
+  rm -rf "$CORE_DST"
+  cp -R "$CORE_SRC" "$CORE_DST"
+  ok ".dev_cycle/core/ — copied from tool repo (refreshed)"
+elif [[ ! -d "$CORE_DST" ]]; then
+  cp -R "$CORE_SRC" "$CORE_DST"
+  ok ".dev_cycle/core/ — copied from tool repo"
 else
-  skip ".dev_cycle/skills symlink"
+  skip ".dev_cycle/core/"
 fi
 
-# Legacy: entire .claude/skills was a single symlink to the tool skills dir
-CLAUDE_SKILLS_DIR="$PROJECT_ROOT/.claude/skills"
-mkdir -p "$PROJECT_ROOT/.claude"
-if [[ -L "$CLAUDE_SKILLS_DIR" ]]; then
-  rm "$CLAUDE_SKILLS_DIR"
-  ok "Removed legacy .claude/skills symlink (replaced with skill hub layout)"
+# ---------------------------------------------------------------------------
+# Step 2: Detect AI tool folders and link skill hubs
+# ---------------------------------------------------------------------------
+
+AI_TOOLS=(.claude .cursor .agents .gemini)
+DETECTED_TOOLS=()
+
+for tool_dir in "${AI_TOOLS[@]}"; do
+  if [[ -d "$PROJECT_ROOT/$tool_dir" ]]; then
+    DETECTED_TOOLS+=("$tool_dir")
+  fi
+done
+
+echo ""
+if [[ ${#DETECTED_TOOLS[@]} -eq 0 ]]; then
+  info "No AI tool folders detected (${AI_TOOLS[*]})."
+  info "Skill hub linking skipped. Create a tool config folder and re-run to link."
+else
+  info "Detected AI tools: ${DETECTED_TOOLS[*]}"
+  for tool_dir in "${DETECTED_TOOLS[@]}"; do
+    # Remove legacy: entire skills dir was a single symlink in older installs
+    local_skills="$PROJECT_ROOT/$tool_dir/skills"
+    if [[ -L "$local_skills" ]]; then
+      rm "$local_skills"
+      ok "Removed legacy $tool_dir/skills symlink"
+    fi
+    link_skill_hub "$tool_dir/skills"
+  done
 fi
 
-info "Linking skill hubs (Claude, Cursor, Codex/Gemini .agents, Gemini .gemini)..."
-link_skill_hub ".claude/skills"
-link_skill_hub ".cursor/skills"
-link_skill_hub ".agents/skills"
-link_skill_hub ".gemini/skills"
+# ---------------------------------------------------------------------------
+# Step 3: AGENTS.md (Codex CLI + Gemini CLI)
+# ---------------------------------------------------------------------------
 
-# ---------------------------------------------------------------------------
-# Step 1b: AGENTS.md  (Codex CLI + Gemini CLI)
-# ---------------------------------------------------------------------------
-#
-# Both Codex CLI and Gemini CLI read AGENTS.md from the project root.
-# With overwrite: strip the old workflow block (start/end markers) and append fresh.
-#
 AGENTS_FILE="$PROJECT_ROOT/AGENTS.md"
 AGENTS_MARKER="<!-- agentic-dev-cycle -->"
 AGENTS_END="<!-- /agentic-dev-cycle -->"
 
+# Build dynamic skill routing table from discovered skills
+SKILL_TABLE=""
+for skill_dir in "$CORE_SRC"/skills/*/; do
+  [[ -d "$skill_dir" ]] || continue
+  [[ -f "$skill_dir/SKILL.md" ]] || continue
+  skill_name="$(basename "$skill_dir")"
+  pretty_name="${skill_name//-/ }"
+  pretty_name="${pretty_name//_/ }"
+  pretty_name="${pretty_name^}"
+  SKILL_TABLE+="| ${pretty_name} | \`.dev_cycle/core/skills/${skill_name}/SKILL.md\` |
+"
+done
+
 if ! $OVERWRITE_INSTALL && [[ -f "$AGENTS_FILE" ]] && grep -qF "$AGENTS_MARKER" "$AGENTS_FILE"; then
-  skip "AGENTS.md (workflow section — skipped; rerun without AGENTIC_DEV_CYCLE_NO_OVERWRITE=1 to refresh)"
+  skip "AGENTS.md workflow section"
 else
+  # Strip existing agentic-dev-cycle block if present
   if [[ -f "$AGENTS_FILE" ]]; then
     agents_tmp="$(mktemp)"
     awk '
@@ -178,26 +222,17 @@ else
   cat >> "$AGENTS_FILE" <<EOF
 
 $AGENTS_MARKER
-## Agentic Dev Cycle Workflow
+## Agentic Dev Cycle
 
-This project uses a structured development workflow. When asked to perform
-any of the following tasks, read the corresponding instructions file first.
+This project uses a structured development workflow powered by skills
+in \`.dev_cycle/core/skills/\`. When asked to perform any of the
+following tasks, read the corresponding skill file first.
 
 | Task | Instructions |
 |------|-------------|
-| Design a feature / expand an idea | \`.dev_cycle/agents/design_agent.md\` |
-| Build a GitHub Issue | \`.dev_cycle/agents/build_agent.md\` |
-| Review a feature branch | \`.dev_cycle/agents/review_agent.md\` |
-| Fix a bug or PR | \`.dev_cycle/agents/fix_agent.md\` |
-| Deploy / start dev servers | \`.dev_cycle/agents/deploy_agent.md\` |
-| Complete a merged work order | \`.dev_cycle/skills/complete/SKILL.md\` |
-
-**Project config** (tech stack, architecture patterns, gate commands):
-\`.dev_cycle/project.md\`
-
-**Work orders:** GitHub Issues labeled \`dev-cycle:build\`
-**Past decisions:** GitHub Issues labeled \`dev-cycle:decision\` — always scan
-these before starting work on a new feature.
+${SKILL_TABLE}
+**Utilities:** \`.dev_cycle/core/\` contains scripts (e.g. \`create_issues.py\`)
+for workflow automation.
 
 $AGENTS_END
 EOF
@@ -205,134 +240,68 @@ EOF
 fi
 
 # ---------------------------------------------------------------------------
-# Step 1c: .cursor/rules/dev-cycle.mdc  (Cursor Composer)
+# Step 4: .cursor/rules/dev-cycle.mdc (only if .cursor/ exists)
 # ---------------------------------------------------------------------------
-#
-# Cursor reads .cursor/rules/*.mdc files automatically in every Composer
-# session when alwaysApply: true is set. This gives Composer the workflow
-# routing without the user needing to manually reference files.
-#
-CURSOR_RULES_DIR="$PROJECT_ROOT/.cursor/rules"
-CURSOR_RULE_FILE="$CURSOR_RULES_DIR/dev-cycle.mdc"
 
-mkdir -p "$CURSOR_RULES_DIR"
+if [[ -d "$PROJECT_ROOT/.cursor" ]]; then
+  CURSOR_RULES_DIR="$PROJECT_ROOT/.cursor/rules"
+  CURSOR_RULE_FILE="$CURSOR_RULES_DIR/dev-cycle.mdc"
 
-if ! $OVERWRITE_INSTALL && [[ -f "$CURSOR_RULE_FILE" ]]; then
-  skip ".cursor/rules/dev-cycle.mdc"
-else
-  cat > "$CURSOR_RULE_FILE" <<'EOF'
+  mkdir -p "$CURSOR_RULES_DIR"
+
+  CURSOR_SKILL_TABLE=""
+  for skill_dir in "$CORE_SRC"/skills/*/; do
+    [[ -d "$skill_dir" ]] || continue
+    [[ -f "$skill_dir/SKILL.md" ]] || continue
+    skill_name="$(basename "$skill_dir")"
+    pretty_name="${skill_name//-/ }"
+    pretty_name="${pretty_name//_/ }"
+    pretty_name="${pretty_name^}"
+    CURSOR_SKILL_TABLE+="| ${pretty_name} | \`.dev_cycle/core/skills/${skill_name}/SKILL.md\` |
+"
+  done
+
+  if ! $OVERWRITE_INSTALL && [[ -f "$CURSOR_RULE_FILE" ]]; then
+    skip ".cursor/rules/dev-cycle.mdc"
+  else
+    cat > "$CURSOR_RULE_FILE" <<EOF
 ---
 description: Agentic dev cycle workflow routing
 alwaysApply: true
 ---
 
-## Agentic Dev Cycle Workflow
+## Agentic Dev Cycle
 
-This project uses a structured development workflow. When asked to perform
-any of the following tasks, read the corresponding instructions file first
-before doing anything else.
+This project uses a structured development workflow powered by skills
+in \`.dev_cycle/core/skills/\`. When asked to perform any of the
+following tasks, read the corresponding skill file first.
 
 | Task | Instructions |
 |------|-------------|
-| Design a feature / expand an idea | `.dev_cycle/agents/design_agent.md` |
-| Build a GitHub Issue | `.dev_cycle/agents/build_agent.md` |
-| Review a feature branch | `.dev_cycle/agents/review_agent.md` |
-| Fix a bug or PR | `.dev_cycle/agents/fix_agent.md` |
-| Deploy / start dev servers | `.dev_cycle/agents/deploy_agent.md` |
-| Complete a merged work order | `.dev_cycle/skills/complete/SKILL.md` |
-
-**Project config** (tech stack, architecture patterns, gate commands):
-`.dev_cycle/project.md`
-
-**Work orders:** GitHub Issues labeled `dev-cycle:build`
-**Past decisions:** GitHub Issues labeled `dev-cycle:decision` — scan
-these before starting work on any new feature.
+${CURSOR_SKILL_TABLE}
+**Utilities:** \`.dev_cycle/core/\` contains scripts (e.g. \`create_issues.py\`)
+for workflow automation.
 EOF
-  ok ".cursor/rules/dev-cycle.mdc"
+    ok ".cursor/rules/dev-cycle.mdc"
+  fi
 fi
 
 # ---------------------------------------------------------------------------
-# Step 2: Check GitHub CLI
+# Step 5: Check GitHub CLI
 # ---------------------------------------------------------------------------
 
 echo ""
 info "Checking GitHub CLI..."
 if command -v gh &>/dev/null && gh auth status &>/dev/null 2>&1; then
   ok "gh CLI authenticated — GitHub Issues integration available"
-  info "The dev-cycle:decision label will be created automatically by /complete on first use."
 elif command -v gh &>/dev/null; then
   info "gh CLI found but not authenticated. Run: gh auth login"
-  info "GitHub Issues integration requires auth to create/manage issues."
-  info "The dev-cycle:decision label will be created automatically by /complete on first use."
 else
   info "gh CLI not found. Install from https://cli.github.com/"
-  info "GitHub Issues integration requires gh CLI to be installed and authenticated."
 fi
 
 # ---------------------------------------------------------------------------
-# Step 3: Create .dev_cycle/ directory structure
-# ---------------------------------------------------------------------------
-
-for dir in \
-  .dev_cycle/design \
-  .dev_cycle/agents
-do
-  if [[ ! -d "$PROJECT_ROOT/$dir" ]]; then
-    mkdir -p "$PROJECT_ROOT/$dir"
-    touch "$PROJECT_ROOT/$dir/.gitkeep"
-    ok "Created $dir/"
-  fi
-done
-
-# ---------------------------------------------------------------------------
-# Step 4: Copy template files (overwrite by default)
-# ---------------------------------------------------------------------------
-
-copy_template() {
-  local src="$1"
-  local dst="$2"
-  if ! $OVERWRITE_INSTALL && [[ -f "$dst" ]]; then
-    skip "$(basename "$dst")"
-    return
-  fi
-  cp "$src" "$dst"
-  ok "$(basename "$dst")"
-}
-
-if $OVERWRITE_INSTALL; then
-  info "Refreshing .dev_cycle templates from tool (overwrites existing copies)."
-  info "Re-run /init-dev-cycle afterward to regenerate project-specific project.md, gates_config.sh, and agents."
-fi
-
-info "Copying config templates to .dev_cycle/..."
-copy_template "$SCRIPT_DIR/dev_cycle/gates.sh"        "$PROJECT_ROOT/.dev_cycle/gates.sh"
-copy_template "$SCRIPT_DIR/dev_cycle/gates_config.sh" "$PROJECT_ROOT/.dev_cycle/gates_config.sh"
-copy_template "$SCRIPT_DIR/dev_cycle/project.md"      "$PROJECT_ROOT/.dev_cycle/project.md"
-
-chmod +x "$PROJECT_ROOT/.dev_cycle/gates.sh"
-
-# Copy generic agent instruction files (only if agents/ is empty)
-for prompt in design_agent build_agent review_agent fix_agent deploy_agent; do
-  copy_template \
-    "$SCRIPT_DIR/dev_cycle/agents/${prompt}.md" \
-    "$PROJECT_ROOT/.dev_cycle/agents/${prompt}.md"
-done
-
-# Decisions are stored as GitHub Issues labeled "dev-cycle:decision"
-# No local file needed — created automatically by /complete
-
-# Copy workflow docs (reference — overwrite when install overwrites)
-for doc in workflow.md; do
-  if ! $OVERWRITE_INSTALL && [[ -f "$PROJECT_ROOT/.dev_cycle/$doc" ]]; then
-    skip "$doc"
-  else
-    cp "$SCRIPT_DIR/dev_cycle/$doc" "$PROJECT_ROOT/.dev_cycle/$doc"
-    ok "$doc"
-  fi
-done
-
-# ---------------------------------------------------------------------------
-# Step 5: Update .gitignore
+# Step 6: Update .gitignore
 # ---------------------------------------------------------------------------
 
 GITIGNORE="$PROJECT_ROOT/.gitignore"
@@ -354,7 +323,6 @@ add_gitignore_entry() {
 echo ""
 info "Updating .gitignore..."
 
-# Add a header comment if we're adding our entries
 if [[ ! -f "$GITIGNORE" ]] || ! grep -qF "Agentic dev cycle" "$GITIGNORE"; then
   if [[ ! -f "$GITIGNORE" ]]; then
     echo "# Agentic dev cycle" > "$GITIGNORE"
@@ -364,18 +332,16 @@ if [[ ! -f "$GITIGNORE" ]] || ! grep -qF "Agentic dev cycle" "$GITIGNORE"; then
 fi
 
 add_gitignore_entry ".dev_cycle/"
-add_gitignore_entry ".claude/skills"
-add_gitignore_entry ".cursor/skills"
-add_gitignore_entry ".agents/skills"
-add_gitignore_entry ".gemini/skills"
 
-# AGENTS.md and .cursor/rules/dev-cycle.mdc are intentionally NOT gitignored
-# — commit them so all team members get workflow routing regardless of their AI tool.
+# Only add skill hub ignores for detected tools
+if [[ ${#DETECTED_TOOLS[@]} -gt 0 ]]; then
+  for tool_dir in "${DETECTED_TOOLS[@]}"; do
+    add_gitignore_entry "$tool_dir/skills"
+  done
+fi
 
 echo ""
 echo "  Note: .dev_cycle/ is gitignored by default — your workflow state is private."
-echo "  Teams who want shared workflow state: remove '.dev_cycle/' from .gitignore"
-echo "  and commit it to main."
 
 # ---------------------------------------------------------------------------
 # Done
@@ -384,30 +350,16 @@ echo "  and commit it to main."
 echo ""
 echo -e "${GREEN}Install complete.${NC}"
 echo ""
-if $OVERWRITE_INSTALL; then
-  echo "  Templates and routing were refreshed from this tool. If this was an upgrade,"
-  echo "  run /init-dev-cycle (or \"init dev cycle\") again to regenerate project-specific"
-  echo "  project.md, gates_config.sh, and agents/*.md."
-  echo ""
+if [[ ${#DETECTED_TOOLS[@]} -gt 0 ]]; then
+  echo "  Linked AI tools: ${DETECTED_TOOLS[*]}"
+else
+  echo "  No AI tool folders found. To link skills for a tool, create its"
+  echo "  config folder (e.g. mkdir .claude) and re-run this script."
 fi
-echo "Next steps:"
-echo "  1. Configure for your project:"
-echo "     Claude Code:  open project, run /init-dev-cycle"
-echo "     Cursor:       open Composer, type 'init dev cycle'"
-echo "     Codex CLI:    codex 'init dev cycle'"
-echo "     Gemini CLI:   gemini 'init dev cycle'"
-echo "     This generates .dev_cycle/project.md, gates_config.sh, and agent instructions."
 echo ""
-echo "  2. Ensure gh CLI is authenticated: gh auth login"
-echo "     (required for GitHub Issues integration)"
+echo "  Skills:    .dev_cycle/core/skills/"
+echo "  Utilities: .dev_cycle/core/"
 echo ""
-echo "  3. Commit the generated files:"
-echo "     git add .dev_cycle/ .claude/skills AGENTS.md .cursor/rules/dev-cycle.mdc"
-echo "     git commit -m 'dev_cycle: add agentic dev cycle workflow'"
-echo "     git push origin main"
+echo "  To add a new AI tool later, create its folder and re-run:"
+echo "    bash $SCRIPT_DIR/install.sh $PROJECT_ROOT"
 echo ""
-echo "  Note: .dev_cycle/ is gitignored by default (workflow state is private)."
-echo "  Teams: remove '.dev_cycle/' from .gitignore and commit it to share."
-echo "  AGENTS.md is committed — Codex/Gemini users get workflow routing automatically."
-echo ""
-echo "See .dev_cycle/workflow.md for the full development process."
