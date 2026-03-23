@@ -14,6 +14,7 @@ Usage:
     python core/create_issues.py .taskmaster/tasks/tasks.json
     python core/create_issues.py tasks.json --dry-run
     python core/create_issues.py tasks.json --repo owner/repo
+    python core/create_issues.py tasks.json --tag v2
 """
 
 from __future__ import annotations
@@ -246,6 +247,11 @@ def main() -> None:
         "--repo",
         help="GitHub repo (owner/repo). Auto-detected from git remote if omitted.",
     )
+    parser.add_argument(
+        "--tag",
+        default="master",
+        help="Which task set to run from the tasks JSON (default: master).",
+    )
     args = parser.parse_args()
 
     tasks_path = Path(args.tasks_file)
@@ -255,10 +261,21 @@ def main() -> None:
     with open(tasks_path) as f:
         data = json.load(f)
 
-    # tasks.json may be a bare list or {"tasks": [...]}
+    tag = args.tag
+    tasks: list[dict] = []
+
     if isinstance(data, list):
-        tasks: list[dict] = data
+        tasks = data
+    elif isinstance(data.get("tasks"), dict):
+        # {"tasks": {"master": [...], "v2": [...]}}
+        if tag not in data["tasks"]:
+            sys.exit(f"Tag '{tag}' not found in tasks. Available: {', '.join(data['tasks'].keys())}")
+        tasks = data["tasks"][tag]
+    elif tag in data:
+        # {"master": [...], "v2": [...]}
+        tasks = data[tag]
     else:
+        # {"tasks": [...]} (flat list, tag ignored)
         tasks = data.get("tasks", [])
 
     if args.repo:
@@ -269,6 +286,7 @@ def main() -> None:
 
     print(f"Repository : {repo}")
     print(f"Tasks file : {tasks_path}")
+    print(f"Tag        : {tag}")
     print(f"Total tasks: {len(tasks)}")
     if args.dry_run:
         print("Mode       : DRY RUN (no issues will be created)\n")
@@ -343,6 +361,12 @@ def main() -> None:
     if not args.dry_run:
         if isinstance(data, list):
             output_data = tasks
+        elif isinstance(data.get("tasks"), dict):
+            data["tasks"][tag] = tasks
+            output_data = data
+        elif tag in data:
+            data[tag] = tasks
+            output_data = data
         else:
             data["tasks"] = tasks
             output_data = data

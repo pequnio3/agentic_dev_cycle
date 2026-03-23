@@ -81,8 +81,28 @@ The `closes #N` keyword auto-closes the issue when the phase branch merges to `m
 - Commits provide the same granularity: `git log`, `git bisect`, `git revert <commit>`.
 - Review happens at the phase/PR level, which is more meaningful than micro-PRs.
 
-## Task Fields
-
+## Tasks Branch ##
+The tasks.json file should be in the following format
+```json
+{
+  "<feature_slug>": {
+    "tasks": [
+      {
+        "id": "<task_id>",
+        "title": "<title>",
+        "description": "<description>",
+        "details": "<details>",
+        "status": "pending",
+        "dependencies": [],
+        "priority": "<priority>",
+        "subtasks": [],
+        "tags": [],
+        "metadata": {}
+      }
+    ]
+  }
+}
+```
 Each task description has these fields. They appear in both the GitHub Issue body AND the `tasks.json` entry:
 
 - **Task ID** (e.g., P1-01)
