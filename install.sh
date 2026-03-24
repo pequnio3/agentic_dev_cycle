@@ -12,7 +12,7 @@
 #   bash ~/tools/agentic-dev-cycle/install.sh
 #
 # What it does:
-#   1. Copies core/ into .dev_cycle/core/ in the target project
+#   1. Copies core/ into .dev-cycle/core/ in the target project (includes create_issues.py)
 #   2. Detects existing AI tool folders (.claude, .cursor, .agents, .gemini)
 #      and wires skill hubs so each tool discovers the dev-cycle skills
 #   3. Appends workflow routing to AGENTS.md
@@ -57,24 +57,42 @@ if [[ "${AGENTIC_DEV_CYCLE_NO_OVERWRITE:-}" == "1" ]]; then
   OVERWRITE_INSTALL=false
 fi
 
+DEV_CYCLE_ROOT="$PROJECT_ROOT/.dev-cycle"
+LEGACY_DEV_CYCLE_ROOT="$PROJECT_ROOT/.dev_cycle"
+
+# Migrate legacy install directory (underscore) → .dev-cycle (hyphen)
+if [[ -d "$LEGACY_DEV_CYCLE_ROOT" ]] && [[ ! -e "$DEV_CYCLE_ROOT" ]]; then
+  mv "$LEGACY_DEV_CYCLE_ROOT" "$DEV_CYCLE_ROOT"
+  ok "Renamed legacy .dev_cycle/ → .dev-cycle/"
+fi
+if [[ -d "$LEGACY_DEV_CYCLE_ROOT" ]] && [[ -d "$DEV_CYCLE_ROOT" ]]; then
+  info "Both .dev_cycle and .dev-cycle exist — using .dev-cycle/. Remove .dev_cycle/ manually if obsolete."
+fi
+
 # ---------------------------------------------------------------------------
-# link_skill_hub — wire a per-tool skill hub to .dev_cycle/core/skills
+# link_skill_hub — wire a per-tool skill hub to .dev-cycle/core/skills
 # ---------------------------------------------------------------------------
 #
 # Creates:
-#   $hub/dev_cycle    → ../../.dev_cycle/core/skills        (bundle)
-#   $hub/$skill_name  → ../../.dev_cycle/core/skills/$name  (flat per-skill)
+#   $hub/dev-cycle    → ../../.dev-cycle/core/skills        (bundle)
+#   $hub/$skill_name  → ../../.dev-cycle/core/skills/$name  (flat per-skill)
 #
 # AI tools scan immediate children of their skills dir, so both the bundle
 # and the flat per-skill symlinks are needed for discovery.
 link_skill_hub() {
   local hub_rel="$1"
   local hub_abs="$PROJECT_ROOT/$hub_rel"
-  local skill_source="$PROJECT_ROOT/.dev_cycle/core/skills"
+  local skill_source="$DEV_CYCLE_ROOT/core/skills"
 
   mkdir -p "$hub_abs"
 
-  # Remove stale symlinks from old installs (pointed at .dev_cycle/skills without /core/)
+  # Drop legacy bundle symlink name (underscore)
+  if [[ -L "$hub_abs/dev_cycle" ]]; then
+    rm "$hub_abs/dev_cycle"
+    ok "Removed legacy $hub_rel/dev_cycle symlink"
+  fi
+
+  # Remove stale symlinks from old installs (pointed at */skills without /core/)
   for existing_link in "$hub_abs"/*; do
     [[ -L "$existing_link" ]] || continue
     local target
@@ -83,17 +101,21 @@ link_skill_hub() {
       rm "$existing_link"
       ok "Removed stale link: $hub_rel/$(basename "$existing_link")"
     fi
+    if [[ "$target" == *".dev-cycle/skills"* ]] && [[ "$target" != *".dev-cycle/core/skills"* ]]; then
+      rm "$existing_link"
+      ok "Removed stale link: $hub_rel/$(basename "$existing_link")"
+    fi
   done
 
-  # Bundle link: dev_cycle → all skills
-  local bundle="$hub_abs/dev_cycle"
+  # Bundle link: dev-cycle → all skills
+  local bundle="$hub_abs/dev-cycle"
   if [[ -e "$bundle" ]] && [[ ! -L "$bundle" ]]; then
-    echo "Warning: $hub_rel/dev_cycle exists and is not a symlink — not overwriting."
+    echo "Warning: $hub_rel/dev-cycle exists and is not a symlink — not overwriting."
   elif $OVERWRITE_INSTALL || [[ ! -e "$bundle" ]]; then
-    ln -sfn "../../.dev_cycle/core/skills" "$bundle"
-    ok "$hub_rel/dev_cycle → .dev_cycle/core/skills"
+    ln -sfn "../../.dev-cycle/core/skills" "$bundle"
+    ok "$hub_rel/dev-cycle → .dev-cycle/core/skills"
   else
-    skip "$hub_rel/dev_cycle"
+    skip "$hub_rel/dev-cycle"
   fi
 
   # Per-skill flat links (AI tools discover immediate children)
@@ -106,11 +128,11 @@ link_skill_hub() {
     if [[ -e "$link" ]] && [[ ! -L "$link" ]]; then
       echo "Warning: $hub_rel/$name exists and is not a symlink — not overwriting."
     elif $OVERWRITE_INSTALL || [[ ! -e "$link" ]]; then
-      ln -sfn "../../.dev_cycle/core/skills/$name" "$link"
-      ok "$hub_rel/$name → .dev_cycle/core/skills/$name"
+      ln -sfn "../../.dev-cycle/core/skills/$name" "$link"
+      ok "$hub_rel/$name → .dev-cycle/core/skills/$name"
     elif [[ ! -e "$link" ]]; then
-      ln -sfn "../../.dev_cycle/core/skills/$name" "$link"
-      ok "$hub_rel/$name → .dev_cycle/core/skills/$name"
+      ln -sfn "../../.dev-cycle/core/skills/$name" "$link"
+      ok "$hub_rel/$name → .dev-cycle/core/skills/$name"
     else
       skip "$hub_rel/$name"
     fi
@@ -122,34 +144,38 @@ echo "Agentic Dev Cycle — installing into $(basename "$PROJECT_ROOT")"
 echo ""
 
 # ---------------------------------------------------------------------------
-# Step 1: Copy core/ into .dev_cycle/core/
+# Step 1: Copy core/ into .dev-cycle/core/
 # ---------------------------------------------------------------------------
 
 CORE_SRC="$SCRIPT_DIR/core"
-CORE_DST="$PROJECT_ROOT/.dev_cycle/core"
+CORE_DST="$DEV_CYCLE_ROOT/core"
 
 if [[ ! -d "$CORE_SRC" ]]; then
   echo "Error: core/ directory not found in tool repo: $CORE_SRC"
   exit 1
 fi
 
-mkdir -p "$PROJECT_ROOT/.dev_cycle"
+mkdir -p "$DEV_CYCLE_ROOT"
 
 # Remove legacy skills symlink if present (old installs pointed here)
 if [[ -L "$PROJECT_ROOT/.dev_cycle/skills" ]]; then
   rm "$PROJECT_ROOT/.dev_cycle/skills"
   ok "Removed legacy .dev_cycle/skills symlink"
 fi
+if [[ -L "$DEV_CYCLE_ROOT/skills" ]]; then
+  rm "$DEV_CYCLE_ROOT/skills"
+  ok "Removed legacy .dev-cycle/skills symlink"
+fi
 
 if $OVERWRITE_INSTALL; then
   rm -rf "$CORE_DST"
   cp -R "$CORE_SRC" "$CORE_DST"
-  ok ".dev_cycle/core/ — copied from tool repo (refreshed)"
+  ok ".dev-cycle/core/ — copied from tool repo (refreshed)"
 elif [[ ! -d "$CORE_DST" ]]; then
   cp -R "$CORE_SRC" "$CORE_DST"
-  ok ".dev_cycle/core/ — copied from tool repo"
+  ok ".dev-cycle/core/ — copied from tool repo"
 else
-  skip ".dev_cycle/core/"
+  skip ".dev-cycle/core/"
 fi
 
 # ---------------------------------------------------------------------------
@@ -199,7 +225,7 @@ for skill_dir in "$CORE_SRC"/skills/*/; do
   pretty_name="${skill_name//-/ }"
   pretty_name="${pretty_name//_/ }"
   pretty_name="${pretty_name^}"
-  SKILL_TABLE+="| ${pretty_name} | \`.dev_cycle/core/skills/${skill_name}/SKILL.md\` |
+  SKILL_TABLE+="| ${pretty_name} | \`.dev-cycle/core/skills/${skill_name}/SKILL.md\` |
 "
 done
 
@@ -225,13 +251,13 @@ $AGENTS_MARKER
 ## Agentic Dev Cycle
 
 This project uses a structured development workflow powered by skills
-in \`.dev_cycle/core/skills/\`. When asked to perform any of the
+in \`.dev-cycle/core/skills/\`. When asked to perform any of the
 following tasks, read the corresponding skill file first.
 
 | Task | Instructions |
 |------|-------------|
 ${SKILL_TABLE}
-**Utilities:** \`.dev_cycle/core/\` contains scripts (e.g. \`create_issues.py\`)
+**Utilities:** \`.dev-cycle/core/\` contains scripts (e.g. \`create_issues.py\`)
 for workflow automation.
 
 $AGENTS_END
@@ -257,7 +283,7 @@ if [[ -d "$PROJECT_ROOT/.cursor" ]]; then
     pretty_name="${skill_name//-/ }"
     pretty_name="${pretty_name//_/ }"
     pretty_name="${pretty_name^}"
-    CURSOR_SKILL_TABLE+="| ${pretty_name} | \`.dev_cycle/core/skills/${skill_name}/SKILL.md\` |
+    CURSOR_SKILL_TABLE+="| ${pretty_name} | \`.dev-cycle/core/skills/${skill_name}/SKILL.md\` |
 "
   done
 
@@ -273,13 +299,13 @@ alwaysApply: true
 ## Agentic Dev Cycle
 
 This project uses a structured development workflow powered by skills
-in \`.dev_cycle/core/skills/\`. When asked to perform any of the
+in \`.dev-cycle/core/skills/\`. When asked to perform any of the
 following tasks, read the corresponding skill file first.
 
 | Task | Instructions |
 |------|-------------|
 ${CURSOR_SKILL_TABLE}
-**Utilities:** \`.dev_cycle/core/\` contains scripts (e.g. \`create_issues.py\`)
+**Utilities:** \`.dev-cycle/core/\` contains scripts (e.g. \`create_issues.py\`)
 for workflow automation.
 EOF
     ok ".cursor/rules/dev-cycle.mdc"
@@ -331,6 +357,7 @@ if [[ ! -f "$GITIGNORE" ]] || ! grep -qF "Agentic dev cycle" "$GITIGNORE"; then
   fi
 fi
 
+add_gitignore_entry ".dev-cycle/"
 add_gitignore_entry ".dev_cycle/"
 
 # Only add skill hub ignores for detected tools
@@ -341,7 +368,7 @@ if [[ ${#DETECTED_TOOLS[@]} -gt 0 ]]; then
 fi
 
 echo ""
-echo "  Note: .dev_cycle/ is gitignored by default — your workflow state is private."
+echo "  Note: .dev-cycle/ is gitignored by default — your workflow state is private."
 
 # ---------------------------------------------------------------------------
 # Done
@@ -357,8 +384,8 @@ else
   echo "  config folder (e.g. mkdir .claude) and re-run this script."
 fi
 echo ""
-echo "  Skills:    .dev_cycle/core/skills/"
-echo "  Utilities: .dev_cycle/core/"
+echo "  Skills:    .dev-cycle/core/skills/"
+echo "  Utilities: .dev-cycle/core/ (e.g. create_issues.py)"
 echo ""
 echo "  To add a new AI tool later, create its folder and re-run:"
 echo "    bash $SCRIPT_DIR/install.sh $PROJECT_ROOT"

@@ -1,5 +1,5 @@
 Role: Act as a Senior Technical Project Manager and Systems Architect.
-Task: Analyze the attached design document. Break down the transition from the [Existing System] to the [New System] into a granular, execution-ready task list.
+Task: Analyze the referebced design document. Break down the transition from the [Existing System] to the [New System] into a granular, execution-ready task list.
 
 Requirements:
 
@@ -89,7 +89,7 @@ The tasks.json file should be in the following format
     "tasks": [
       {
         "id": "<task_id>",
-        "title": "<title>",
+        "title": "[<feature_slug>] <taskId (ex: P1-01)>",
         "description": "<description>",
         "details": "<details>",
         "status": "pending",
@@ -166,3 +166,5 @@ For developer descriptions add the following instructions (you should fill in <>
 5. Commit fixes directly to the phase branch if needed.
 6. Close All the associated issues.
 7. Mark the review task complete once the PR is ready for merge.
+
+Please output the <feature_slug> you used to the user.
